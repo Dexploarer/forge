@@ -106,18 +106,62 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       })
 
       if (!user) {
-        // Create user on first login
+        // Create user on first login - fetch full user data from Privy
+        const privyUser = await privy.getUser(privyUserId)
+
+        // Extract wallet address (primary wallet if multiple)
+        const walletAddress = privyUser.wallet?.address ||
+                             privyUser.linkedAccounts?.find((acc: any) => acc.type === 'wallet')?.address
+
+        // Extract email
+        const email = privyUser.email?.address ||
+                     privyUser.linkedAccounts?.find((acc: any) => acc.type === 'email')?.address
+
+        // Extract Farcaster data
+        const farcasterAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'farcaster')
+
         const [newUser] = await db.insert(users).values({
           privyUserId,
+          email: email || null,
+          walletAddress: walletAddress || null,
+          farcasterFid: farcasterAccount?.fid || null,
+          farcasterUsername: farcasterAccount?.username || null,
+          farcasterVerified: farcasterAccount?.verified || false,
+          farcasterProfile: farcasterAccount ? {
+            displayName: farcasterAccount.displayName,
+            pfp: farcasterAccount.pfp,
+            bio: farcasterAccount.bio,
+          } : null,
           role: 'member',
           lastLoginAt: new Date(),
         }).returning()
         user = newUser
       } else {
-        // Update last login
+        // Update last login and sync latest data from Privy
+        const privyUser = await privy.getUser(privyUserId)
+
+        const walletAddress = privyUser.wallet?.address ||
+                             privyUser.linkedAccounts?.find((acc: any) => acc.type === 'wallet')?.address
+        const email = privyUser.email?.address ||
+                     privyUser.linkedAccounts?.find((acc: any) => acc.type === 'email')?.address
+        const farcasterAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'farcaster')
+
         await db.update(users)
-          .set({ lastLoginAt: new Date() })
+          .set({
+            lastLoginAt: new Date(),
+            // Update wallet and email if changed
+            walletAddress: walletAddress || user.walletAddress,
+            email: email || user.email,
+            farcasterFid: farcasterAccount?.fid || user.farcasterFid,
+            farcasterUsername: farcasterAccount?.username || user.farcasterUsername,
+            farcasterVerified: farcasterAccount?.verified || user.farcasterVerified,
+          })
           .where(eq(users.id, user.id))
+
+        // Refresh user data
+        user = await db.query.users.findFirst({
+          where: eq(users.id, user.id)
+        }) || user
       }
 
       // Attach user to request (guaranteed to be defined here)
