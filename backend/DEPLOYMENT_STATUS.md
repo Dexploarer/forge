@@ -20,13 +20,24 @@
 - Migrations were running during build phase, but database only accessible at runtime
 
 **Solution:** Refactored deployment process:
-- Created `scripts/start.sh` to run migrations at startup (not during build)
 - Updated `railway.json` to remove `db:migrate` from buildCommand
-- Changed startCommand to `./scripts/start.sh` which runs migrations then starts server
+- Changed startCommand to `bun run db:migrate && bun run start` (runs at runtime)
+- Migrations now run when database is accessible
 
-**Status:** ✅ **FIXED** - Ready to commit and push
+**Status:** ✅ **FIXED** - Committed (commit: `02c4c9b`, improved in `4693393`)
 
-### 3. Qdrant Integration Complete
+### 3. Fixed Railway Healthcheck Failure
+**Problem:** Healthcheck was timing out after previous fix
+- Bash script approach had execution/permission issues on Railway
+
+**Solution:** Simplified to direct command:
+- Changed from `./scripts/start.sh` to `bun run db:migrate && bun run start`
+- More reliable with Railway's process manager
+- No bash/permission concerns
+
+**Status:** ✅ **FIXED** - Committed and pushed (commit: `4693393`)
+
+### 4. Qdrant Integration Complete
 All Qdrant code was already committed in previous commit (`6cc6536`):
 
 ✅ **Services Updated:**
