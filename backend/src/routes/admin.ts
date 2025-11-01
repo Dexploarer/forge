@@ -338,13 +338,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
   // One-time Qdrant setup endpoint
   fastify.post('/setup-qdrant', {
-    preHandler: async (request: any, reply) => {
-      // Allow bypass for initial setup if environment variable is set
-      if (process.env.ALLOW_SETUP_WITHOUT_AUTH !== 'true') {
-        await fastify.authenticate(request, reply)
-        await requireAdmin(request)
-      }
-    },
+    preHandler: [fastify.authenticate, requireAdmin],
     schema: {
       description: 'Initialize Qdrant collections and embed manifest data (run once)',
       summary: 'Setup Qdrant',
