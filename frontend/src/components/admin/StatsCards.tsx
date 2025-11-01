@@ -41,7 +41,8 @@ export function StatsCards() {
     }
 
     fetchStats()
-  }, [apiFetch])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (loading) {
     return (
