@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { useApiFetch } from '../../utils/api'
 
 interface WhitelistEntry {
   id: string
@@ -16,8 +15,7 @@ export function WhitelistManager() {
   const [entries, setEntries] = useState<WhitelistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
-  const apiFetch = useApiFetch()
+  const [success] = useState<string | null>(null)
 
   // Form state
   const [walletAddress, setWalletAddress] = useState('')
@@ -52,11 +50,13 @@ export function WhitelistManager() {
       return
     }
 
-    // TODO: Implement /api/admin/whitelist/add endpoint
+    setIsSubmitting(true)
     setError('Whitelist management endpoint not yet implemented')
+    setIsSubmitting(false)
+    // TODO: Implement /api/admin/whitelist/add endpoint
   }
 
-  const handleRemoveWallet = async (id: string) => {
+  const handleRemoveWallet = async (_id: string) => {
     if (!confirm('Are you sure you want to remove this wallet from the whitelist?')) {
       return
     }

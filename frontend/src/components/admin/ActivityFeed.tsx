@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useApiFetch } from '../../utils/api'
 
 interface ActivityEvent {
   id: string
@@ -15,8 +14,7 @@ interface ActivityEvent {
 export function ActivityFeed() {
   const [events, setEvents] = useState<ActivityEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const apiFetch = useApiFetch()
+  const [error] = useState<string | null>(null)
 
   useEffect(() => {
     // TODO: Implement /api/admin/activity endpoint
