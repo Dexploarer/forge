@@ -7,7 +7,18 @@ import { ForbiddenError, NotFoundError } from '../utils/errors'
 const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // Middleware to check admin role
   const requireAdmin = async (request: any) => {
+    fastify.log.info({
+      hasUser: !!request.user,
+      userId: request.user?.id,
+      userRole: request.user?.role,
+      userPrivyId: request.user?.privyUserId
+    }, 'Admin access check')
+
     if (!request.user || request.user.role !== 'admin') {
+      fastify.log.warn({
+        hasUser: !!request.user,
+        userRole: request.user?.role
+      }, 'Admin access denied')
       throw new ForbiddenError('Admin access required')
     }
   }

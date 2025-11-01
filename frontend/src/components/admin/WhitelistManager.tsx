@@ -26,19 +26,15 @@ export function WhitelistManager() {
 
   useEffect(() => {
     fetchWhitelist()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const fetchWhitelist = async () => {
     try {
       setLoading(true)
-      const response = await apiFetch('/api/admin/whitelist')
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch whitelist')
-      }
-
-      const data = await response.json()
-      setEntries(data.whitelist || [])
+      // TODO: Implement /api/admin/whitelist endpoint
+      // For now, show empty whitelist
+      setEntries([])
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load whitelist')
@@ -56,36 +52,8 @@ export function WhitelistManager() {
       return
     }
 
-    try {
-      setIsSubmitting(true)
-      setError(null)
-      setSuccess(null)
-
-      const response = await apiFetch('/api/admin/whitelist/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          walletAddress,
-          reason: reason.trim() || undefined
-        })
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to add wallet')
-      }
-
-      setSuccess('Wallet added to whitelist successfully')
-      setWalletAddress('')
-      setReason('')
-      await fetchWhitelist()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add wallet')
-    } finally {
-      setIsSubmitting(false)
-    }
+    // TODO: Implement /api/admin/whitelist/add endpoint
+    setError('Whitelist management endpoint not yet implemented')
   }
 
   const handleRemoveWallet = async (id: string) => {
@@ -93,28 +61,8 @@ export function WhitelistManager() {
       return
     }
 
-    try {
-      setError(null)
-      setSuccess(null)
-
-      const response = await apiFetch('/api/admin/whitelist/remove', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ walletAddress: entries.find(e => e.id === id)?.walletAddress })
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Failed to remove wallet')
-      }
-
-      setSuccess('Wallet removed from whitelist successfully')
-      await fetchWhitelist()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove wallet')
-    }
+    // TODO: Implement /api/admin/whitelist/remove endpoint
+    setError('Whitelist management endpoint not yet implemented')
   }
 
   const formatDate = (dateString: string) => {

@@ -37,14 +37,9 @@ export function UserTable() {
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      const response = await apiFetch('/api/admin/users')
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch users')
-      }
-
-      const data = await response.json()
-      setUsers(data.users || [])
+      // TODO: Implement /api/admin/users endpoint
+      // For now, show empty users list
+      setUsers([])
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load users')
