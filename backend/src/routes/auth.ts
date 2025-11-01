@@ -35,7 +35,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   }, async (request) => {
-    return { user: request.user! }
+    const user = request.user!
+    return {
+      user: {
+        ...user,
+        createdAt: user.createdAt.toISOString(),
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      }
+    }
   })
 
   // Logout (optional - mainly for frontend state)
