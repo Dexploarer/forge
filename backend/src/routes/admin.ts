@@ -400,17 +400,17 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         const typeMap: Record<string, string> = {
           items: 'ITEM',
           npcs: 'NPC',
-          music: 'ASSET',
-          biomes: 'ASSET',
-          zones: 'ASSET',
-          world: 'ASSET',
-          banks: 'ASSET',
-          stores: 'ASSET',
+          music: 'MANIFEST',
+          biomes: 'MANIFEST',
+          zones: 'MANIFEST',
+          world: 'MANIFEST',
+          banks: 'MANIFEST',
+          stores: 'MANIFEST',
           avatars: 'CHARACTER',
           asset_requirements: 'MANIFEST',
           generation_configs: 'MANIFEST',
           resources: 'ITEM',
-          buildings: 'ASSET',
+          buildings: 'MANIFEST',
         }
 
         const contentType = typeMap[manifestType]
