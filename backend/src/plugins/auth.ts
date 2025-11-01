@@ -43,6 +43,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     try {
       // Extract token from Authorization header
       const authHeader = request.headers.authorization
+      fastify.log.info({ url: request.url, hasAuth: !!authHeader }, 'Auth attempt')
+
       if (!authHeader) {
         throw new UnauthorizedError('Missing authorization header')
       }
@@ -51,6 +53,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       if (!token) {
         throw new UnauthorizedError('Invalid authorization format')
       }
+
+      fastify.log.info({ tokenPrefix: token.substring(0, 20) }, 'Token received')
 
       // TEST MODE: Skip Privy and look up real users from database
       let privyUserId: string
@@ -96,8 +100,10 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         }
       } else {
         // PRODUCTION MODE: Use Privy verification
+        fastify.log.info('Verifying Privy token...')
         const claims = await privy.verifyAuthToken(token)
         privyUserId = claims.userId
+        fastify.log.info({ privyUserId }, 'Privy token verified')
       }
 
       // Find or create user
@@ -107,7 +113,9 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
 
       if (!user) {
         // Create user on first login - fetch full user data from Privy
+        fastify.log.info({ privyUserId }, 'New user - fetching data from Privy')
         const privyUser = await privy.getUser(privyUserId)
+        fastify.log.info({ privyUser }, 'Privy user data retrieved')
 
         // Extract wallet address (primary wallet if multiple)
         const walletAddress = privyUser.wallet?.address ||
@@ -136,6 +144,9 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
           lastLoginAt: new Date(),
         }).returning()
         user = newUser
+        if (user) {
+          fastify.log.info({ userId: user.id, email: user.email, wallet: user.walletAddress }, '✅ NEW USER CREATED IN DATABASE')
+        }
       } else {
         // Update last login and sync latest data from Privy
         const privyUser = await privy.getUser(privyUserId)

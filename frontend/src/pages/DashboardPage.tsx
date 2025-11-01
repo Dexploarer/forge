@@ -9,11 +9,25 @@ export default function DashboardPage() {
   // Sync user with backend on mount
   useEffect(() => {
     const syncUser = async () => {
-      if (!authenticated) return
+      if (!authenticated) {
+        console.log('[DashboardPage] Not authenticated, skipping sync')
+        return
+      }
+
+      console.log('[DashboardPage] Starting user sync...')
 
       try {
         const token = await getAccessToken()
+
+        if (!token) {
+          console.error('[DashboardPage] No access token available')
+          return
+        }
+
+        console.log('[DashboardPage] Got access token, calling backend...')
+
         const response = await fetch(`${API_URL}/api/auth/me`, {
+          method: 'GET',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -21,10 +35,14 @@ export default function DashboardPage() {
           credentials: 'include',
         })
 
+        console.log('[DashboardPage] Backend response status:', response.status)
+
         if (!response.ok) {
-          console.error('[DashboardPage] Failed to sync user with backend:', response.statusText)
+          const errorData = await response.json().catch(() => ({ message: response.statusText }))
+          console.error('[DashboardPage] Failed to sync user:', errorData)
         } else {
-          console.log('[DashboardPage] User synced with backend successfully')
+          const data = await response.json()
+          console.log('[DashboardPage] User synced successfully:', data)
         }
       } catch (error) {
         console.error('[DashboardPage] Error syncing user:', error)
