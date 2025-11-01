@@ -55,6 +55,26 @@
 
 **Status:** ✅ **FIXED** - Committed and pushed (commit: `1c210ba`)
 
+### 5. Fixed Railway Healthcheck Failure - Integrated Migrations
+**Problem:** Healthcheck still failing even with 300-second timeout
+- Command chaining (`bun run db:migrate && bun run start`) may have process issues
+- Separate migration process could have database connection conflicts
+- Railway may not handle command chaining reliably
+
+**Solution:** Integrated migrations into server startup:
+- Moved migration logic directly into `src/index.ts`
+- Migrations run as first step in server process (before server.listen())
+- Single process handles entire startup sequence
+- Simplified railway.json to just `bun run start`
+
+**Benefits:**
+- Single process = single database connection lifecycle
+- Railway sees server process start immediately
+- Better error handling and logging
+- Follows containerized application best practices
+
+**Status:** ✅ **FIXED** - Committed and pushed (commit: `d049eca`)
+
 ### 5. Qdrant Integration Complete
 All Qdrant code was already committed in previous commit (`6cc6536`):
 
