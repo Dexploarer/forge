@@ -1,0 +1,18 @@
+[test]
+# Configure Bun test runner for sequential execution
+# This prevents shared resource conflicts with the global testServer setup
+
+# Preload the setup file to initialize the shared test server
+preload = ["./tests/setup.ts"]
+
+# Run tests sequentially (one at a time) to avoid database connection conflicts
+# The shared Fastify server and database connections in setup.ts cannot handle
+# concurrent test file execution safely
+concurrent = false
+
+# Set timeout for E2E tests (30 seconds per test)
+# Some tests involve database operations and async processing
+timeout = 30000
+
+# Don't bail on first failure - run all tests to see full picture
+bail = false

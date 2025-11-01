@@ -1,0 +1,533 @@
+---
+alwaysApply: true
+description: Simple async operations pattern - DEFER complex job queues
+---
+
+# Simple Async Operations Pattern
+
+## Core Decision: Start Simple
+
+**CRITICAL**: Do NOT jump to BullMQ + Redis for async operations. Use simple async pattern first.
+
+### Why Not BullMQ/Redis?
+- **Complexity**: 3-4 days implementation + ongoing maintenance
+- **Cost**: $15-50/month for Redis hosting
+- **Overkill**: Not needed for < 10,000 operations/day
+- **Better Alternatives**: Managed services like Inngest/Trigger.dev when you need scale
+
+### When to Add Job Queue
+Only add managed queue system when:
+- Processing > 10,000 operations/day
+- Need 99.9% reliability guarantees
+- Require multiple workers
+- Complex workflow orchestration needed
+
+## Simple Async Pattern
+
+### Step 1: Return 202 Accepted Immediately
+
+```typescript
+// POST /api/assets/generate
+async function generateAsset(request, reply) {
+  // 1. Create record with 'processing' status
+  const [asset] = await db.insert(assets).values({
+    name: request.body.name,
+    status: 'processing',  // KEY: Mark as processing
+    ownerId: request.user!.id,
+    type: request.body.type,
+    metadata: {
+      prompt: request.body.prompt,
+      progress: 0
+    }
+  }).returning()
+
+  // 2. Return 202 Accepted immediately
+  reply.code(202).send({
+    taskId: asset.id,
+    status: 'processing',
+    statusUrl: `/api/assets/${asset.id}/status`
+  })
+
+  // 3. Start processing WITHOUT awaiting
+  // This runs in background
+  processGenerationAsync(asset.id, request.body)
+    .catch(err => {
+      server.log.error({ err, assetId: asset.id }, 'Generation failed')
+    })
+
+  // Request completes immediately!
+}
+```
+
+### Step 2: Background Processing Function
+
+```typescript
+async function processGenerationAsync(
+  assetId: string,
+  params: GenerationParams
+): Promise<void> {
+  try {
+    // Update progress: 10%
+    await db.update(assets)
+      .set({
+        metadata: {
+          ...params,
+          progress: 10,
+          stage: 'optimizing-prompt'
+        }
+      })
+      .where(eq(assets.id, assetId))
+
+    // Stage 1: Optimize prompt with GPT-4
+    const optimizedPrompt = await openai.chat({
+      model: 'gpt-4',
+      messages: [{
+        role: 'system',
+        content: 'Optimize this 3D asset prompt...'
+      }, {
+        role: 'user',
+        content: params.prompt
+      }]
+    })
+
+    // Update progress: 30%
+    await db.update(assets)
+      .set({
+        metadata: { progress: 30, stage: 'generating-model' }
+      })
+      .where(eq(assets.id, assetId))
+
+    // Stage 2: Generate 3D model with Meshy
+    const meshyTask = await meshy.textTo3D({
+      prompt: optimizedPrompt,
+      artStyle: params.artStyle || 'realistic'
+    })
+
+    // Poll Meshy until complete (30-90 seconds)
+    let result
+    while (true) {
+      result = await meshy.getTask(meshyTask.taskId)
+
+      if (result.status === 'SUCCEEDED') {
+        break
+      }
+
+      if (result.status === 'FAILED') {
+        throw new Error('Meshy generation failed')
+      }
+
+      // Update progress based on Meshy progress
+      await db.update(assets)
+        .set({
+          metadata: {
+            progress: 30 + (result.progress * 0.6),
+            stage: 'generating-model'
+          }
+        })
+        .where(eq(assets.id, assetId))
+
+      // Wait 5 seconds before next poll
+      await new Promise(resolve => setTimeout(resolve, 5000))
+    }
+
+    // Upload GLB to file server
+    const fileUrl = await fileServerClient.uploadFromUrl(
+      result.modelUrl,
+      `models/${assetId}.glb`
+    )
+
+    // Mark as complete
+    await db.update(assets)
+      .set({
+        status: 'published',
+        fileUrl: fileUrl.publicUrl,
+        fileSize: result.fileSize,
+        metadata: {
+          progress: 100,
+          stage: 'complete',
+          meshyTaskId: meshyTask.taskId
+        }
+      })
+      .where(eq(assets.id, assetId))
+
+    server.log.info({ assetId }, 'Asset generation complete')
+
+  } catch (error) {
+    // Mark as failed
+    await db.update(assets)
+      .set({
+        status: 'failed',
+        metadata: {
+          error: error.message,
+          stage: 'failed'
+        }
+      })
+      .where(eq(assets.id, assetId))
+
+    server.log.error({ error, assetId }, 'Asset generation failed')
+    throw error
+  }
+}
+```
+
+### Step 3: Status Check Endpoint
+
+```typescript
+// GET /api/assets/:id/status
+async function getAssetStatus(request, reply) {
+  const asset = await db.query.assets.findFirst({
+    where: eq(assets.id, request.params.id)
+  })
+
+  if (!asset) {
+    throw new NotFoundError('Asset not found')
+  }
+
+  return {
+    id: asset.id,
+    status: asset.status,  // 'processing', 'published', 'failed'
+    progress: asset.metadata?.progress ?? 0,
+    stage: asset.metadata?.stage ?? null,
+    error: asset.metadata?.error ?? null,
+    result: asset.status === 'published' ? {
+      fileUrl: asset.fileUrl,
+      fileSize: asset.fileSize
+    } : null
+  }
+}
+```
+
+## Complete Example: Voice Generation
+
+```typescript
+// POST /api/voice/generate
+const voiceGenerationRoutes: FastifyPluginAsync = async (server) => {
+  server.post('/generate', {
+    schema: {
+      body: z.object({
+        text: z.string().min(1).max(5000),
+        profileId: z.string().uuid()
+      })
+    }
+  }, async (request, reply) => {
+    const { text, profileId } = request.body
+
+    // Verify profile exists and user has access
+    const profile = await verifyOwnership(
+      server,
+      voiceProfiles,
+      profileId,
+      request.user!.id,
+      'Voice Profile'
+    )
+
+    // Create generation record
+    const [generation] = await server.db.insert(voiceGenerations).values({
+      profileId,
+      text,
+      status: 'processing',
+      userId: request.user!.id
+    }).returning()
+
+    // Return immediately
+    reply.code(202).send({
+      taskId: generation.id,
+      status: 'processing',
+      statusUrl: `/api/voice/generations/${generation.id}`
+    })
+
+    // Process in background
+    processVoiceGeneration(generation.id, profile, text)
+      .catch(err => {
+        server.log.error({ err, generationId: generation.id }, 'Voice generation failed')
+      })
+  })
+
+  // Status endpoint
+  server.get('/generations/:id', async (request) => {
+    const generation = await server.db.query.voiceGenerations.findFirst({
+      where: eq(voiceGenerations.id, request.params.id)
+    })
+
+    if (!generation) {
+      throw new NotFoundError('Generation not found')
+    }
+
+    // Check ownership
+    if (generation.userId !== request.user!.id) {
+      throw new ForbiddenError('Access denied')
+    }
+
+    return {
+      id: generation.id,
+      status: generation.status,
+      audioUrl: generation.audioUrl,
+      duration: generation.duration,
+      error: generation.error,
+      createdAt: generation.createdAt.toISOString()
+    }
+  })
+}
+
+async function processVoiceGeneration(
+  generationId: string,
+  profile: VoiceProfile,
+  text: string
+): Promise<void> {
+  try {
+    // Generate with ElevenLabs
+    const audio = await elevenlabs.textToSpeech({
+      voiceId: profile.elevenLabsVoiceId,
+      text,
+      modelId: 'eleven_turbo_v2'
+    })
+
+    // Upload to file server
+    const uploadResult = await fileServerClient.uploadBuffer(
+      audio,
+      `voice/${generationId}.mp3`,
+      'audio/mpeg'
+    )
+
+    // Get audio duration (you'd use a library like 'audio-buffer-utils')
+    const duration = await getAudioDuration(audio)
+
+    // Calculate cost
+    const cost = Math.ceil(text.length / 1000) * 30  // $0.30 per 1000 chars
+
+    // Mark complete
+    await db.update(voiceGenerations)
+      .set({
+        status: 'completed',
+        audioUrl: uploadResult.publicUrl,
+        duration,
+        costCents: cost,
+        completedAt: new Date()
+      })
+      .where(eq(voiceGenerations.id, generationId))
+
+    // Track AI service cost
+    await db.insert(aiServiceCalls).values({
+      userId: profile.userId,
+      service: 'elevenlabs',
+      operation: 'text-to-speech',
+      costCents: cost,
+      metadata: {
+        generationId,
+        characters: text.length,
+        voiceId: profile.elevenLabsVoiceId
+      }
+    })
+
+  } catch (error) {
+    await db.update(voiceGenerations)
+      .set({
+        status: 'failed',
+        error: error.message,
+        completedAt: new Date()
+      })
+      .where(eq(voiceGenerations.id, generationId))
+
+    throw error
+  }
+}
+```
+
+## Key Patterns
+
+### 1. Status Field
+
+Always use enum for status:
+```typescript
+export const assetStatusEnum = pgEnum('asset_status', [
+  'draft',
+  'processing',
+  'published',
+  'failed'
+])
+```
+
+### 2. Progress Tracking
+
+Store progress in metadata JSONB field:
+```typescript
+metadata: {
+  progress: 50,  // 0-100
+  stage: 'generating-model',
+  estimatedTimeRemaining: 30  // seconds
+}
+```
+
+### 3. Error Handling
+
+Always catch and store errors:
+```typescript
+try {
+  // Processing
+} catch (error) {
+  await db.update(table)
+    .set({
+      status: 'failed',
+      metadata: { error: error.message }
+    })
+    .where(eq(table.id, recordId))
+}
+```
+
+### 4. Polling Pattern
+
+For external services that require polling:
+```typescript
+async function pollUntilComplete(taskId: string): Promise<Result> {
+  let attempts = 0
+  const maxAttempts = 60  // 5 minutes with 5s intervals
+
+  while (attempts < maxAttempts) {
+    const result = await externalService.getStatus(taskId)
+
+    if (result.status === 'completed') {
+      return result
+    }
+
+    if (result.status === 'failed') {
+      throw new Error(result.error)
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 5000))
+    attempts++
+  }
+
+  throw new Error('Polling timeout')
+}
+```
+
+## Limitations (Acceptable for MVP)
+
+### What You Lose
+1. **Job Persistence** - Jobs lost on server restart
+2. **Retry Logic** - No automatic retries on failure
+3. **Prioritization** - All jobs processed in order received
+4. **Concurrency Control** - Limited by single server
+5. **Monitoring** - Basic logging only
+
+### Why It's OK
+- **MVP Stage** - Get to market faster
+- **< 10k ops/day** - Simple async handles this fine
+- **Railway Auto-Restart** - Minimal downtime
+- **User Expectations** - Users understand failures happen
+- **Cost** - $0 vs $15-50/month for Redis
+- **Complexity** - 1-2 days vs 3-4 days + maintenance
+
+## When to Upgrade
+
+### Triggers for Adding Job Queue
+
+| Metric | Threshold | Action |
+|--------|-----------|--------|
+| Operations/day | > 10,000 | Consider managed queue |
+| Failure rate | > 5% | Add retry logic (Inngest) |
+| User complaints | > 10/week | Add monitoring (Inngest) |
+| Server restarts | > 1/day | Add job persistence |
+
+### Recommended Upgrade Path
+
+1. **First**: Simple async (1-2 days, $0)
+2. **Later**: Inngest or Trigger.dev (2-3 days, $0-20/mo)
+3. **Never**: BullMQ + Redis (too complex for SaaS)
+
+### Why Inngest/Trigger.dev?
+
+```typescript
+// Inngest example (when you need it)
+import { inngest } from './inngest'
+
+export const generateAsset = inngest.createFunction(
+  { name: 'Generate 3D Asset' },
+  { event: 'asset.generate' },
+  async ({ event, step }) => {
+    // Automatic retries
+    const optimized = await step.run('optimize-prompt', async () => {
+      return await openai.chat(...)
+    })
+
+    // Automatic persistence
+    const model = await step.run('generate-model', async () => {
+      return await meshy.generate(optimized)
+    })
+
+    // Built-in monitoring
+    return { modelUrl: model.url }
+  }
+)
+
+// Trigger from route
+await inngest.send({
+  name: 'asset.generate',
+  data: { assetId, prompt }
+})
+```
+
+Benefits:
+- ✅ Automatic retries
+- ✅ Job persistence
+- ✅ Built-in monitoring
+- ✅ Managed infrastructure
+- ✅ Free tier available
+- ✅ Easy migration from simple async
+
+## Migration Path
+
+When ready to upgrade:
+
+```typescript
+// 1. Install Inngest
+bun add inngest
+
+// 2. Keep existing simple async as fallback
+async function generateAsset(request, reply) {
+  const [asset] = await db.insert(assets).values({...}).returning()
+
+  reply.code(202).send({ taskId: asset.id })
+
+  if (env.USE_INNGEST) {
+    // New: Use Inngest
+    await inngest.send({
+      name: 'asset.generate',
+      data: { assetId: asset.id, params: request.body }
+    })
+  } else {
+    // Fallback: Simple async
+    processGenerationAsync(asset.id, request.body).catch(...)
+  }
+}
+```
+
+## Decision Checklist
+
+Before adding job queue, ask:
+
+- [ ] Are requests timing out? → Add simple async first
+- [ ] Are jobs lost on restart? → Acceptable for MVP
+- [ ] Need scheduled jobs? → Use Railway cron + simple async
+- [ ] Traffic > 10k ops/day? → Evaluate managed queue (Inngest)
+- [ ] Have infrastructure budget? → Still start simple
+- [ ] Team has Redis experience? → Doesn't matter, use managed
+- [ ] Need complex workflows? → Use Inngest, not BullMQ
+
+## Remember
+
+✅ **DO**: Start with simple async pattern
+✅ **DO**: Return 202 Accepted immediately
+✅ **DO**: Store status in database
+✅ **DO**: Provide status check endpoint
+✅ **DO**: Handle errors gracefully
+✅ **DO**: Log async operations
+
+❌ **DON'T**: Jump to BullMQ + Redis
+❌ **DON'T**: Over-engineer for scale you don't have
+❌ **DON'T**: Add complexity without proven need
+❌ **DON'T**: Forget error handling
+❌ **DON'T**: Block on async operations
+❌ **DON'T**: Forget to update status on completion/failure
+
+**Motto**: "Simple async first, managed queue when proven necessary"

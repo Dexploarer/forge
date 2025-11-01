@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1761886762424,
+      "tag": "0001_volatile_hemingway",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1761889487001,
+      "tag": "0002_past_boomer",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1761890534705,
+      "tag": "0003_next_fallen_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1761890900000,
+      "tag": "0004_system_infrastructure",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1761955260971,
+      "tag": "0005_voice_manifests",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1761965256889,
+      "tag": "0005_adorable_invaders",
+      "breakpoints": true
+    }
+  ]
+}

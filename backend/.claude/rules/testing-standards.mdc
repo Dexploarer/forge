@@ -1,0 +1,643 @@
+---
+alwaysApply: true
+description: Forge Backend testing standards and philosophy
+---
+
+# Forge Backend Testing Standards
+
+## Core Testing Philosophy
+
+### Real Testing Only
+- **NO MOCKS** - Use real database, real server, real services
+- **NO SPIES** - Test actual behavior, not implementation
+- **NO TEST ABSTRACTIONS** - Use Bun's native test framework only
+- **REAL GAMEPLAY** - Full HTTP request/response cycles
+- **FAIL FAST** - Tests must find actual bugs immediately
+
+### Why No Mocks?
+
+Mocks test your mocks, not your code. Real testing finds real bugs:
+
+```typescript
+// ❌ BAD - Mocked test (worthless)
+const mockDb = {
+  query: () => ({ users: { findFirst: () => mockUser } })
+}
+test('finds user', () => {
+  const user = await mockDb.query.users.findFirst()
+  expect(user).toBe(mockUser)  // You just tested your mock!
+})
+
+// ✅ GOOD - Real test (finds real bugs)
+test('finds user', async () => {
+  const [created] = await db.insert(users).values({
+    email: 'test@example.com',
+    privyUserId: 'test-123',
+    role: 'member'
+  }).returning()
+
+  const found = await db.query.users.findFirst({
+    where: eq(users.id, created.id)
+  })
+
+  expect(found).toBeDefined()
+  expect(found?.email).toBe('test@example.com')
+})
+```
+
+## Test Framework
+
+### Bun Test Runner
+
+```typescript
+import { test, expect, describe, beforeAll, afterAll } from 'bun:test'
+import { buildServer } from '@/server'
+import type { FastifyInstance } from 'fastify'
+
+let server: FastifyInstance
+
+beforeAll(async () => {
+  server = await buildServer()
+})
+
+afterAll(async () => {
+  await server.close()
+})
+
+describe('Feature Name', () => {
+  test('should do something', async () => {
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/endpoint'
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = JSON.parse(response.body)
+    expect(body).toHaveProperty('expectedField')
+  })
+})
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+bun test
+
+# Run specific test file
+bun test tests/health.test.ts
+
+# Watch mode
+bun test --watch
+
+# Coverage
+bun test --coverage
+
+# Verbose output
+bun test --verbose
+```
+
+## Test Structure
+
+### Test Files Organization
+
+```
+tests/
+├── setup.ts              # Global test setup, exports testServer
+├── health.test.ts        # Health check tests
+├── auth.test.ts          # Authentication tests
+├── assets.test.ts        # Asset CRUD tests
+├── users.test.ts         # User management tests
+├── teams.test.ts         # Team functionality tests
+├── projects.test.ts      # Project tests
+├── lore.test.ts          # Lore entry tests
+├── quests.test.ts        # Quest system tests
+├── npcs.test.ts          # NPC tests
+├── music.test.ts         # Music generation tests
+├── sound-effects.test.ts # SFX tests
+└── voice.test.ts         # Voice synthesis tests
+```
+
+### Global Test Setup (setup.ts)
+
+```typescript
+import { beforeAll, afterAll } from 'bun:test'
+import { buildServer } from '../src/server'
+import type { FastifyInstance } from 'fastify'
+
+export let testServer: FastifyInstance
+
+beforeAll(async () => {
+  // Build server once for all tests
+  testServer = await buildServer()
+})
+
+afterAll(async () => {
+  // Close server after all tests
+  await testServer.close()
+})
+```
+
+### Individual Test Files
+
+```typescript
+import { test, expect, describe } from 'bun:test'
+import { testServer } from './setup'
+
+describe('Assets API', () => {
+  test('GET /api/assets returns paginated results', async () => {
+    const response = await testServer.inject({
+      method: 'GET',
+      url: '/api/assets?page=1&limit=20'
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = JSON.parse(response.body)
+
+    expect(body).toHaveProperty('items')
+    expect(Array.isArray(body.items)).toBe(true)
+    expect(body).toHaveProperty('pagination')
+    expect(body.pagination).toHaveProperty('total')
+    expect(body.pagination).toHaveProperty('page', 1)
+    expect(body.pagination).toHaveProperty('limit', 20)
+  })
+
+  test('GET /api/assets/:id with invalid ID returns 404', async () => {
+    const response = await testServer.inject({
+      method: 'GET',
+      url: '/api/assets/invalid-uuid'
+    })
+
+    expect(response.statusCode).toBe(400)  // Validation error
+    const body = JSON.parse(response.body)
+    expect(body).toHaveProperty('error')
+  })
+
+  test('POST /api/assets creates new asset', async () => {
+    const response = await testServer.inject({
+      method: 'POST',
+      url: '/api/assets',
+      headers: {
+        authorization: `Bearer ${validTestToken}`
+      },
+      payload: {
+        name: 'Test Asset',
+        type: 'model',
+        visibility: 'public'
+      }
+    })
+
+    expect(response.statusCode).toBe(201)
+    const body = JSON.parse(response.body)
+    expect(body).toHaveProperty('id')
+    expect(body.name).toBe('Test Asset')
+    expect(body.type).toBe('model')
+  })
+})
+```
+
+## Testing Patterns
+
+### HTTP Request Testing (Fastify Inject)
+
+```typescript
+// GET request
+const response = await testServer.inject({
+  method: 'GET',
+  url: '/api/endpoint',
+  query: { page: '1', limit: '20' }
+})
+
+// POST request with auth
+const response = await testServer.inject({
+  method: 'POST',
+  url: '/api/endpoint',
+  headers: {
+    authorization: 'Bearer valid-token',
+    'content-type': 'application/json'
+  },
+  payload: {
+    name: 'Test',
+    value: 123
+  }
+})
+
+// PATCH request
+const response = await testServer.inject({
+  method: 'PATCH',
+  url: '/api/resources/123',
+  headers: {
+    authorization: 'Bearer valid-token'
+  },
+  payload: {
+    name: 'Updated Name'
+  }
+})
+
+// DELETE request
+const response = await testServer.inject({
+  method: 'DELETE',
+  url: '/api/resources/123',
+  headers: {
+    authorization: 'Bearer valid-token'
+  }
+})
+```
+
+### Database Testing
+
+```typescript
+// Create test data
+const [testUser] = await db.insert(users).values({
+  email: 'test@example.com',
+  privyUserId: `test-${Date.now()}`,
+  role: 'member'
+}).returning()
+
+// Test query
+const found = await db.query.users.findFirst({
+  where: eq(users.id, testUser.id)
+})
+
+expect(found).toBeDefined()
+expect(found?.email).toBe('test@example.com')
+
+// Cleanup (optional - tests run in transaction)
+await db.delete(users).where(eq(users.id, testUser.id))
+```
+
+### Authentication Testing
+
+```typescript
+describe('Authentication', () => {
+  test('protected route without token returns 401', async () => {
+    const response = await testServer.inject({
+      method: 'GET',
+      url: '/api/auth/me'
+    })
+
+    expect(response.statusCode).toBe(401)
+    const body = JSON.parse(response.body)
+    expect(body.error).toContain('Missing authorization header')
+  })
+
+  test('protected route with invalid token returns 401', async () => {
+    const response = await testServer.inject({
+      method: 'GET',
+      url: '/api/auth/me',
+      headers: {
+        authorization: 'Bearer invalid-token'
+      }
+    })
+
+    expect(response.statusCode).toBe(401)
+  })
+
+  // For testing with valid tokens, you need actual Privy tokens
+  // or a test mode in your auth plugin
+})
+```
+
+### Authorization Testing
+
+```typescript
+test('user cannot delete another users asset', async () => {
+  // Create asset owned by user A
+  const [asset] = await db.insert(assets).values({
+    name: 'User A Asset',
+    ownerId: userA.id,
+    type: 'model',
+    status: 'published'
+  }).returning()
+
+  // Try to delete with user B token
+  const response = await testServer.inject({
+    method: 'DELETE',
+    url: `/api/assets/${asset.id}`,
+    headers: {
+      authorization: `Bearer ${userBToken}`
+    }
+  })
+
+  expect(response.statusCode).toBe(403)  // Forbidden
+})
+```
+
+### Validation Testing
+
+```typescript
+test('invalid input returns 400 with validation errors', async () => {
+  const response = await testServer.inject({
+    method: 'POST',
+    url: '/api/assets',
+    headers: {
+      authorization: `Bearer ${validToken}`
+    },
+    payload: {
+      name: '',  // Too short
+      type: 'invalid-type',  // Not in enum
+      visibility: 'public'
+    }
+  })
+
+  expect(response.statusCode).toBe(400)
+  const body = JSON.parse(response.body)
+  expect(body.error).toContain('Validation')
+})
+```
+
+### Pagination Testing
+
+```typescript
+test('pagination returns correct structure', async () => {
+  const response = await testServer.inject({
+    method: 'GET',
+    url: '/api/assets?page=2&limit=10'
+  })
+
+  expect(response.statusCode).toBe(200)
+  const body = JSON.parse(response.body)
+
+  expect(body.items).toBeDefined()
+  expect(body.pagination).toEqual({
+    total: expect.any(Number),
+    page: 2,
+    limit: 10,
+    pages: expect.any(Number)
+  })
+})
+```
+
+## Critical Bugs Found (Patterns to Avoid)
+
+### Bug 1: Auth Plugin Response Handling
+```typescript
+// ❌ BAD - Sending response directly in middleware
+server.decorate('authenticate', async (request, reply) => {
+  if (!token) {
+    return reply.code(401).send({ error: 'Unauthorized' })
+  }
+})
+
+// ✅ GOOD - Throw error, let global handler format
+server.decorate('authenticate', async (request, reply) => {
+  if (!token) {
+    throw new UnauthorizedError('Missing authorization header')
+  }
+})
+```
+
+### Bug 2: SQL Count Type Conversion
+```typescript
+// ❌ BAD - PostgreSQL returns string for COUNT()
+const [{ count }] = await db.select({ count: sql`count(*)` })
+const total = count  // This is a string!
+
+// ✅ GOOD - Convert to number
+const [{ count }] = await db.select({ count: sql<string>`count(*)` })
+const total = Number(count ?? 0)
+```
+
+### Bug 3: Date Serialization
+```typescript
+// ❌ BAD - Returning Date objects
+return {
+  ...asset,
+  createdAt: asset.createdAt,  // Date object
+  updatedAt: asset.updatedAt
+}
+
+// ✅ GOOD - Convert to ISO strings
+return {
+  ...asset,
+  createdAt: asset.createdAt.toISOString(),
+  updatedAt: asset.updatedAt.toISOString()
+}
+```
+
+### Bug 4: Nullable Fields
+```typescript
+// ❌ BAD - Returning undefined
+return {
+  thumbnailUrl: asset.thumbnailUrl  // undefined if null in DB
+}
+
+// ✅ GOOD - Explicit null
+return {
+  thumbnailUrl: asset.thumbnailUrl ?? null
+}
+```
+
+### Bug 5: Error Response Schema
+```typescript
+// ❌ BAD - Inconsistent error field
+{
+  error: 'Something went wrong'
+}
+
+// ✅ GOOD - Use 'message' (matches AppError)
+{
+  statusCode: 400,
+  code: 'VALIDATION_ERROR',
+  message: 'Validation failed'
+}
+```
+
+## Production-Ready Checklist
+
+Before considering tests complete:
+
+- ✅ All features have tests
+- ✅ Both success and error cases covered
+- ✅ Authorization properly tested
+- ✅ Validation tested with invalid inputs
+- ✅ Edge cases tested (empty arrays, null values, etc.)
+- ✅ No TODO comments in test code
+- ✅ No mocks or spies used
+- ✅ All tests pass consistently
+- ✅ Tests run fast (< 10 seconds for full suite)
+- ✅ Database properly seeded for tests
+- ✅ Tests clean up after themselves (or use transactions)
+
+## Test Database Setup
+
+### Option 1: Local PostgreSQL (Recommended for Development)
+
+```bash
+# Install PostgreSQL
+brew install postgresql@15
+brew services start postgresql@15
+
+# Create test database
+createdb forge_test
+
+# Update .env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/forge_test
+```
+
+### Option 2: Railway Database (CI/CD)
+
+```bash
+railway run --service postgres echo $DATABASE_URL
+```
+
+### Option 3: Docker PostgreSQL (Isolated)
+
+```bash
+docker run --name forge-postgres-test \
+  -e POSTGRES_DB=forge_test \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 \
+  -d postgres:15
+```
+
+## Common Issues and Solutions
+
+### Issue: Database Connection Failed
+**Solution**: Ensure PostgreSQL is running and DATABASE_URL is correct
+```bash
+pg_isready
+psql $DATABASE_URL -c "SELECT 1"
+```
+
+### Issue: Port Already in Use
+**Solution**: Kill process on port or use different port
+```bash
+lsof -ti:3000 | xargs kill -9
+```
+
+### Issue: Tests Fail Intermittently
+**Cause**: Race conditions or shared state
+**Solution**: Ensure each test is independent, use unique test data
+
+### Issue: Auth Tests Failing
+**Cause**: Invalid or expired test tokens
+**Solution**: Use test mode in auth plugin or generate fresh tokens
+
+## CI/CD Integration
+
+### GitHub Actions Example
+
+```yaml
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: forge_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run migrations
+        run: bun run db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/forge_test
+
+      - name: Run tests
+        run: bun test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/forge_test
+          PRIVY_APP_ID: test-app-id
+          PRIVY_APP_SECRET: test-app-secret
+```
+
+## Performance Expectations
+
+- **Test Suite**: < 10 seconds total
+- **Individual Tests**: < 100ms each
+- **Database Operations**: Optimized with indexes
+- **Parallel Execution**: Tests can run in parallel (use unique data)
+
+## Writing New Tests
+
+### Template
+
+```typescript
+import { test, expect, describe } from 'bun:test'
+import { testServer } from './setup'
+
+describe('Feature Name', () => {
+  test('should do something successfully', async () => {
+    // Arrange - Set up test data
+    const testData = { name: 'Test' }
+
+    // Act - Perform action
+    const response = await testServer.inject({
+      method: 'POST',
+      url: '/api/endpoint',
+      payload: testData
+    })
+
+    // Assert - Verify results
+    expect(response.statusCode).toBe(201)
+    const body = JSON.parse(response.body)
+    expect(body).toHaveProperty('id')
+    expect(body.name).toBe('Test')
+  })
+
+  test('should handle errors gracefully', async () => {
+    const response = await testServer.inject({
+      method: 'POST',
+      url: '/api/endpoint',
+      payload: { invalid: 'data' }
+    })
+
+    expect(response.statusCode).toBe(400)
+    const body = JSON.parse(response.body)
+    expect(body).toHaveProperty('message')
+  })
+})
+```
+
+## Best Practices
+
+1. **Test Names** - Use descriptive "should" statements
+2. **Arrange-Act-Assert** - Clear test structure
+3. **One Assertion** - Focus each test on one thing
+4. **Independent Tests** - No shared state between tests
+5. **Realistic Data** - Use realistic test data
+6. **Error Cases** - Always test both success and failure
+7. **No Timeouts** - Tests should run fast without delays
+8. **Clean Output** - Tests should not log noise
+
+## Test Coverage Goals
+
+- **Critical Paths**: 100% coverage
+- **Business Logic**: 100% coverage
+- **Routes**: All endpoints tested
+- **Error Handling**: All error cases tested
+- **Authorization**: All permission scenarios tested
+
+## Remember
+
+✅ **DO**: Use real database, real server, real requests
+✅ **DO**: Test actual behavior and outcomes
+✅ **DO**: Write tests that find real bugs
+✅ **DO**: Keep tests fast and independent
+
+❌ **DON'T**: Use mocks, spies, or test frameworks
+❌ **DON'T**: Test implementation details
+❌ **DON'T**: Leave TODO comments in tests
+❌ **DON'T**: Skip error case testing

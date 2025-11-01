@@ -1,0 +1,544 @@
+---
+alwaysApply: true
+description: Forge Backend architecture patterns and design decisions
+---
+
+# Forge Backend Architecture Patterns
+
+## Tech Stack
+
+### Core Technologies
+- **Runtime**: Bun 1.0+ (faster, native TypeScript support)
+- **Framework**: Fastify 5.2+ (battle-tested, fast, good ecosystem)
+- **ORM**: Drizzle (type-safe, performant, migration support)
+- **Database**: PostgreSQL 15+ (industry standard, Railway support)
+- **Auth**: Privy (wallet + email, Farcaster support)
+- **Validation**: Zod (type-safe, composable)
+- **Logger**: Pino (fast, structured logging)
+- **Docs**: Swagger/OpenAPI 3.1 (industry standard)
+
+### Why These Choices
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Runtime | Bun | Faster than Node, native TS, simpler tooling |
+| Framework | Fastify | Production-proven, fast, plugin ecosystem |
+| ORM | Drizzle | Type-safe, no magic, great performance |
+| Database | PostgreSQL | Reliable, feature-rich, Railway integration |
+| Auth | Privy | Web3 + Web2, Farcaster support, simple SDK |
+| Validation | Zod | TypeScript-first, runtime + compile-time |
+
+## Directory Structure
+
+```
+forge/backend/
+├── src/
+│   ├── config/              # Configuration
+│   │   └── env.ts          # Zod-validated environment variables
+│   ├── database/            # Database layer
+│   │   ├── schema/         # Drizzle schemas
+│   │   │   ├── enums.ts    # PostgreSQL enums
+│   │   │   ├── users.ts    # User & auth tables
+│   │   │   ├── assets.ts   # Asset management
+│   │   │   └── index.ts    # Export all schemas
+│   │   ├── db.ts           # Database connection
+│   │   └── migrate.ts      # Migration runner
+│   ├── plugins/             # Fastify plugins
+│   │   ├── auth.ts         # Privy JWT verification
+│   │   ├── cors.ts         # CORS configuration
+│   │   ├── database.ts     # Database plugin
+│   │   ├── swagger.ts      # API documentation
+│   │   └── multipart.ts    # File uploads
+│   ├── routes/              # API routes
+│   │   ├── auth.ts         # Authentication
+│   │   ├── users.ts        # User management
+│   │   ├── assets.ts       # Asset CRUD
+│   │   ├── music.ts        # Music generation
+│   │   ├── sound-effects.ts # Sound effects
+│   │   ├── voice.ts        # Voice synthesis
+│   │   ├── lore.ts         # Game lore
+│   │   ├── quests.ts       # Quest system
+│   │   ├── npcs.ts         # NPCs
+│   │   ├── manifests.ts    # Game manifests
+│   │   ├── 3d-features.ts  # 3D rigging/fitting
+│   │   └── health.ts       # Health checks
+│   ├── services/            # Business logic services
+│   │   ├── openai.service.ts         # OpenAI integration
+│   │   ├── meshy.service.ts          # Meshy 3D generation
+│   │   ├── elevenlabs.service.ts     # Voice synthesis
+│   │   ├── file-server-client.service.ts # File uploads
+│   │   └── (other services)
+│   ├── helpers/             # Reusable helper functions
+│   │   ├── ownership.ts              # Resource ownership checks
+│   │   ├── serialization.ts          # Data serialization
+│   │   ├── asset-url-mapper.ts       # Asset URL mapping
+│   │   ├── pagination.ts             # Pagination helpers
+│   │   └── (other helpers)
+│   ├── utils/               # Utilities
+│   │   ├── errors.ts       # Custom error classes
+│   │   └── encryption.ts   # AES-256-GCM encryption
+│   ├── types/               # TypeScript types
+│   │   └── index.ts        # Shared types
+│   ├── server.ts            # Fastify server setup
+│   └── index.ts             # Application entry
+├── tests/                   # Test files
+│   ├── setup.ts            # Global test setup
+│   ├── health.test.ts      # Health tests
+│   ├── auth.test.ts        # Auth tests
+│   ├── assets.test.ts      # Asset tests
+│   └── (other test files)
+├── uploads/                 # Local file storage
+│   ├── models/             # GLB files
+│   ├── audio/              # MP3/WAV files
+│   └── textures/           # Images
+├── .claude/                 # AI assistant rules & memory
+│   ├── rules/              # Development rules
+│   └── memory/             # Project context
+├── drizzle.config.ts       # Drizzle configuration
+├── package.json
+├── tsconfig.json
+└── .env.example
+```
+
+## Service Architecture Patterns
+
+### Singleton Services
+All services follow the singleton pattern for efficient resource usage:
+
+```typescript
+// Service definition
+export class OpenAIService {
+  private client: OpenAI
+
+  constructor() {
+    this.client = new OpenAI({
+      apiKey: env.OPENAI_API_KEY
+    })
+  }
+
+  async chat(messages: Message[]): Promise<ChatResponse> {
+    // Implementation
+  }
+}
+
+// Singleton export
+export const openaiService = new OpenAIService()
+```
+
+Usage:
+```typescript
+import { openaiService } from '@/services/openai.service'
+
+const response = await openaiService.chat(messages)
+```
+
+### Service Integration Points
+
+**AI Services**:
+- OpenAI - Chat, embeddings, image generation, moderation
+- Anthropic - Claude models for chat
+- Meshy - Text/image-to-3D generation
+- ElevenLabs - Voice synthesis
+- AI Gateway - Unified provider access
+
+**External Services**:
+- Privy - Authentication
+- File Server (Railway) - Large file storage
+- Qdrant - Vector database (optional)
+
+## Database Schema Patterns
+
+### Core Tables
+- `users` - Authentication & profiles
+- `teams` - Team organization
+- `projects` - Project management
+- `assets` - 3D models, audio, textures
+- `api_keys` - Alternative authentication
+- `user_credentials` - Encrypted API keys
+
+### Game Content Tables
+- `lore_entries` - Game world lore
+- `quests` - Quest system
+- `npcs` - Non-player characters
+- `game_manifests` - Content export
+
+### Audio Tables
+- `music_tracks` - Music with AI generation
+- `sound_effects` - SFX with spatial audio
+- `voice_profiles` - Voice definitions
+- `voice_generations` - Synthesis results
+
+### Advanced Tables
+- `fitting_sessions` - 3D equipment fitting
+- `rigging_metadata` - 3D model rigging
+- `weapon_detection` - AI weapon classification
+- `activity_log` - Audit trail
+- `notifications` - User notifications
+- `ai_service_calls` - Cost tracking
+
+### Schema Principles
+1. **Use Enums** - PostgreSQL enums for status fields
+2. **Proper Indexes** - All foreign keys indexed
+3. **Cascading Deletes** - Configured at schema level
+4. **JSONB for Metadata** - Flexible metadata storage
+5. **Timestamps** - Always include createdAt, updatedAt
+6. **Soft Deletes** - Use deletedAt for important data
+
+## Authentication Architecture
+
+### Privy JWT Flow
+
+1. **Frontend Login**
+   - User authenticates via Privy (wallet, email, or Farcaster)
+   - Privy issues JWT access token
+   - Frontend stores token
+
+2. **API Requests**
+   - Frontend sends: `Authorization: Bearer <privy-token>`
+   - Backend verifies JWT with `@privy-io/server-auth`
+   - Extract `privy_user_id` from verified token
+   - Lookup or create user in database
+
+3. **User Creation**
+   - Auto-create user on first login
+   - Store Privy user ID, email, wallet, FID
+   - Default role: 'member'
+
+### Auth Plugin Pattern
+
+```typescript
+// Decorate server with auth methods
+server.decorate('authenticate', async (request, reply) => {
+  // Verify token, get/create user
+  request.user = user
+})
+
+server.decorate('optionalAuth', async (request, reply) => {
+  // Same but doesn't fail if no token
+})
+
+// Use in routes
+server.get('/api/protected', {
+  preHandler: [server.authenticate]
+}, async (request) => {
+  // request.user is available
+})
+```
+
+### API Key Alternative
+
+For server-to-server communication:
+- Generate secure API keys with prefix
+- Store SHA-256 hash in database
+- Support scopes and expiration
+- Rate limiting per key
+
+## Error Handling Architecture
+
+### Global Error Handler
+
+```typescript
+server.setErrorHandler(async (error, request, reply) => {
+  // Log error with context
+  server.log.error({
+    err: error,
+    req: { method, url, params, query }
+  }, error.message)
+
+  // Handle typed errors
+  if (error instanceof AppError) {
+    return reply.code(error.statusCode).send(error)
+  }
+
+  // Handle validation errors
+  if (error.validation) {
+    return reply.code(400).send({
+      error: 'Validation failed',
+      details: error.validation
+    })
+  }
+
+  // Production: hide internal errors
+  if (env.NODE_ENV === 'production') {
+    return reply.code(500).send({
+      error: 'Internal server error'
+    })
+  }
+
+  // Development: full error
+  return reply.code(500).send({
+    error: error.message,
+    stack: error.stack
+  })
+})
+```
+
+### Custom Error Classes
+
+```typescript
+export class AppError extends Error {
+  constructor(
+    public statusCode: number,
+    public code: string,
+    message: string
+  ) {
+    super(message)
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(message = 'Resource not found') {
+    super(404, 'NOT_FOUND', message)
+  }
+}
+
+// Similar for: ValidationError, UnauthorizedError, ForbiddenError, ConflictError
+```
+
+## API Design Principles
+
+### RESTful + Pragmatic
+
+- Use standard HTTP methods (GET, POST, PATCH, DELETE)
+- Use proper status codes (200, 201, 202, 400, 401, 403, 404, 500)
+- Pagination with `page` and `limit` query params
+- Filtering with query params
+- Include related data with `include` param (optional)
+- Consistent response format
+
+### Response Format
+
+```typescript
+// Success response
+{
+  id: "uuid",
+  name: "Asset name",
+  status: "published",
+  createdAt: "2025-01-01T00:00:00.000Z",  // ISO string
+  updatedAt: "2025-01-01T00:00:00.000Z"
+}
+
+// List response with pagination
+{
+  items: [...],
+  pagination: {
+    total: 100,
+    page: 1,
+    limit: 20,
+    pages: 5
+  }
+}
+
+// Error response
+{
+  statusCode: 404,
+  code: "NOT_FOUND",
+  message: "Asset not found"
+}
+```
+
+### Async Operations Pattern
+
+For long-running operations (AI generation, file processing):
+
+```typescript
+// 1. Accept request
+POST /api/assets/generate
+→ 202 Accepted
+
+{
+  taskId: "uuid",
+  status: "processing",
+  statusUrl: "/api/assets/uuid/status"
+}
+
+// 2. Check status
+GET /api/assets/uuid/status
+→ 200 OK
+
+{
+  id: "uuid",
+  status: "processing",  // or "published", "failed"
+  progress: 50,
+  result: null  // or final result when complete
+}
+```
+
+## File Storage Architecture
+
+### Local Development
+- Store files in `/uploads` directory
+- Subdirectories: models/, audio/, textures/
+- Serve via `@fastify/static`
+
+### Production (File Server)
+- Upload to dedicated Railway file server
+- Use internal URL for uploads (fast)
+- Return public CDN URL to clients
+- Asset URL mapping: `asset://glb/file.glb` → `https://files.../file.glb`
+
+## Logging Architecture
+
+### Structured Logging with Pino
+
+```typescript
+// Development: Pretty-printed
+{
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+      translateTime: 'HH:MM:ss Z',
+      ignore: 'pid,hostname'
+    }
+  }
+}
+
+// Production: JSON
+{
+  level: 'info'  // or 'error', 'warn'
+}
+```
+
+### What to Log
+
+- **Info**: Successful operations, user actions
+- **Error**: Failed operations, exceptions
+- **Debug**: Detailed operation info (dev only)
+- **Warn**: Unusual but handled situations
+
+## Security Architecture
+
+### Defense in Depth
+
+1. **Authentication** - Privy JWT or API keys
+2. **Authorization** - Ownership and role checks
+3. **Input Validation** - Zod schemas on all inputs
+4. **SQL Injection** - Drizzle ORM (parameterized queries)
+5. **XSS Prevention** - No HTML in responses
+6. **CORS** - Whitelist allowed origins
+7. **Rate Limiting** - Expensive operations limited
+8. **Encryption** - AES-256-GCM for credentials
+
+### Secrets Management
+
+```typescript
+// ✅ GOOD - Environment variables validated with Zod
+export const env = z.object({
+  DATABASE_URL: z.string().url(),
+  PRIVY_APP_SECRET: z.string().min(32),
+  ENCRYPTION_KEY: z.string().length(64),  // 32-byte hex
+  // ...
+}).parse(process.env)
+```
+
+Never:
+- Hard-code secrets
+- Commit secrets to git
+- Log secrets
+- Return secrets in API responses
+
+## Deployment Architecture
+
+### Railway Configuration
+
+```json
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "bun install && bun run db:migrate"
+  },
+  "deploy": {
+    "startCommand": "bun run start",
+    "healthcheckPath": "/health",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
+```
+
+### Environment Variables
+
+Required in production:
+- `DATABASE_URL` - PostgreSQL connection
+- `PRIVY_APP_ID` - Privy app ID
+- `PRIVY_APP_SECRET` - Privy secret
+- `ENCRYPTION_KEY` - 64-char hex for AES-256
+- `ALLOWED_ORIGINS` - CORS whitelist
+- `NODE_ENV=production`
+- `LOG_LEVEL=info`
+
+## Performance Patterns
+
+### Database Optimization
+- Connection pooling (20 connections in prod)
+- Indexes on all foreign keys
+- GIN indexes for JSONB searches
+- Composite indexes for common queries
+- Pagination for all list endpoints
+
+### Caching Strategy
+- Let PostgreSQL handle caching (good for MVP)
+- Add Redis later if needed for hot data
+- CDN for static files (file server)
+
+### Rate Limiting
+- Database-backed for MVP
+- Per-user and per-service limits
+- Configurable thresholds
+- Admin override capability
+
+## Migration and Evolution
+
+### Adding New Features
+
+1. **Database First** - Update schema
+2. **Migrations** - Generate and test migration
+3. **Services** - Implement business logic
+4. **Routes** - Add API endpoints
+5. **Tests** - Write comprehensive tests
+6. **Docs** - Update Swagger schemas
+
+### When to Add Complexity
+
+**Add job queue (Inngest/Trigger.dev) when**:
+- Processing > 10,000 operations/day
+- Need 99.9% reliability
+- Multiple workers required
+
+**Add caching (Redis) when**:
+- Database CPU > 70%
+- Same queries repeated frequently
+- P95 latency > 200ms
+
+**Add CDN when**:
+- File downloads become bottleneck
+- Users distributed globally
+- Bandwidth costs significant
+
+## Decision Matrix
+
+### Simple Async vs Job Queue
+
+| Scenario | Solution | Why |
+|----------|----------|-----|
+| < 10k ops/day | Simple async | Good enough, $0 cost |
+| Background jobs | Simple async | Acceptable to lose on restart |
+| Scheduled jobs | Simple async + cron | Use Railway cron |
+| > 10k ops/day | Inngest/Trigger.dev | Managed, reliable, cheap |
+| Complex workflows | Inngest | Built for orchestration |
+
+## Monitoring and Observability
+
+### Health Checks
+- `GET /health` - Basic health
+- `GET /health/detailed` - Database health
+- Railway monitors health endpoint
+
+### Logging
+- Structured JSON logs in production
+- Log aggregation via Railway dashboard
+- Error tracking with context
+
+### Metrics
+- Railway provides: CPU, memory, network
+- Database metrics from Drizzle (queries, timing)
+- AI service costs tracked in database
