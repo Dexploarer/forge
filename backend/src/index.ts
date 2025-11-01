@@ -1,15 +1,37 @@
 import { buildServer } from './server'
 import { env } from './config/env'
 import { fileStorageService } from './services/file.service'
+import { migrate } from 'drizzle-orm/postgres-js/migrator'
+import { drizzle } from 'drizzle-orm/postgres-js'
+import { migrationClient } from './database/db'
 
 // =====================================================
 // MAIN APPLICATION ENTRY POINT
 // =====================================================
 
+async function runMigrations() {
+  console.log('🔄 Running database migrations...')
+  try {
+    const db = drizzle(migrationClient)
+    await migrate(db, {
+      migrationsFolder: './src/database/migrations',
+    })
+    console.log('✅ Migrations completed successfully')
+    await migrationClient.end()
+  } catch (error) {
+    console.error('❌ Migration failed:', error)
+    await migrationClient.end()
+    throw error
+  }
+}
+
 async function start() {
   let server
 
   try {
+    // Run database migrations FIRST
+    await runMigrations()
+
     // Initialize file storage (create upload directories)
     await fileStorageService.initialize()
 
