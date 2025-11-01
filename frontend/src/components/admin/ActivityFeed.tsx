@@ -19,31 +19,12 @@ export function ActivityFeed() {
   const apiFetch = useApiFetch()
 
   useEffect(() => {
-    fetchActivity()
-
-    // Poll for new activity every 30 seconds
-    const interval = setInterval(fetchActivity, 30000)
-    return () => clearInterval(interval)
+    // TODO: Implement /api/admin/activity endpoint
+    // For now, show empty activity
+    setEvents([])
+    setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const fetchActivity = async () => {
-    try {
-      const response = await apiFetch('/api/admin/activity')
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch activity')
-      }
-
-      const data = await response.json()
-      setEvents(data.events || [])
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load activity')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getEventIcon = (type: ActivityEvent['type'], success?: boolean) => {
     if (type === 'generation') {

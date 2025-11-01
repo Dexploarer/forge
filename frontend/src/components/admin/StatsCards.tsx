@@ -21,26 +21,16 @@ export function StatsCards() {
   const apiFetch = useApiFetch()
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true)
-        const response = await apiFetch('/api/admin/stats')
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch stats')
-        }
-
-        const data = await response.json()
-        setStats(data.stats)
-        setError(null)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load stats')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchStats()
+    // TODO: Implement /api/admin/stats endpoint
+    // For now, just show mock data
+    setStats({
+      users: { total: 2 },
+      projects: { total: 0 },
+      assets: { total: 0 },
+      teams: { total: 0 },
+      generations: { total: 0, completed: 0, failed: 0, successRate: '0' }
+    })
+    setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
