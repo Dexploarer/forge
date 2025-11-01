@@ -256,9 +256,29 @@ export class ContentEmbedderService {
       for (let i = 0; i < texts.length; i += BATCH_SIZE) {
         const batch = texts.slice(i, i + BATCH_SIZE)
 
+        // Validate batch before sending
+        const validBatch = batch.filter(text => {
+          if (typeof text !== 'string') {
+            console.warn(`[ContentEmbedder] Skipping non-string value in batch: ${typeof text}`)
+            return false
+          }
+          if (text.trim().length === 0) {
+            console.warn(`[ContentEmbedder] Skipping empty string in batch`)
+            return false
+          }
+          return true
+        })
+
+        if (validBatch.length === 0) {
+          console.warn(`[ContentEmbedder] Batch ${i}-${i + batch.length} had no valid texts, skipping`)
+          continue
+        }
+
+        console.log(`[ContentEmbedder] Generating embeddings for batch of ${validBatch.length} texts (chars: ${validBatch.map(t => t.length).join(', ')})`)
+
         const { embeddings } = await embedMany({
           model,
-          values: batch
+          values: validBatch
         })
 
         results.push(...embeddings)
@@ -269,7 +289,12 @@ export class ContentEmbedderService {
 
       return results
     } catch (error: any) {
-      console.error('[ContentEmbedder] Failed to generate embeddings:', error.message)
+      console.error('[ContentEmbedder] Failed to generate embeddings:', error)
+      console.error('[ContentEmbedder] Error details:', {
+        message: error.message,
+        name: error.name,
+        stack: error.stack?.split('\n').slice(0, 3).join('\n')
+      })
       throw error
     }
   }
@@ -464,15 +489,42 @@ export class ContentEmbedderService {
       throw new Error(`Unknown content type: ${contentType}`)
     }
 
-    // Extract texts and generate embeddings
-    const texts = items.map(({ data }) => extractor(data))
+    // Extract texts and filter out invalid/empty ones
+    const itemsWithTexts = items.map((item, index) => {
+      const text = extractor(item.data)
+      return { item, text, index }
+    })
+
+    // Filter out items with empty or very short texts
+    const validItems = itemsWithTexts.filter(({ text }) => {
+      const trimmed = text.trim()
+      if (trimmed.length === 0) {
+        console.warn(`[ContentEmbedder] Skipping item with empty text`)
+        return false
+      }
+      if (trimmed.length < 3) {
+        console.warn(`[ContentEmbedder] Skipping item with very short text: "${trimmed}"`)
+        return false
+      }
+      return true
+    })
+
+    if (validItems.length === 0) {
+      console.log(`[ContentEmbedder] No valid items to embed for ${contentType}`)
+      return { success: true, count: 0 }
+    }
+
+    console.log(`[ContentEmbedder] Embedding ${validItems.length}/${items.length} valid ${contentType} items`)
+
+    // Extract valid texts for embedding
+    const texts = validItems.map(({ text }) => text)
     const embeddings = await this.generateEmbeddings(texts)
 
-    // Prepare points for batch upsert
-    const points = items.map((item, i) => ({
+    // Prepare points for batch upsert (only valid items)
+    const points = validItems.map(({ item, text }, i) => ({
       contentId: item.id,
       embedding: embeddings[i]!,
-      sourceText: texts[i]!,
+      sourceText: text,
       embeddingModel: EMBEDDING_MODEL as any, // Type cast needed - EMBEDDING_MODEL is a const string
       embeddingDimensions: EMBEDDING_DIMENSIONS,
       metadata: item.metadata || {}
@@ -484,8 +536,8 @@ export class ContentEmbedderService {
       points
     })
 
-    console.log(`[ContentEmbedder] Batch embedded ${items.length} ${contentType} items`)
-    return { success: true, count: items.length }
+    console.log(`[ContentEmbedder] Batch embedded ${validItems.length} ${contentType} items`)
+    return { success: true, count: validItems.length }
   }
 
   // =============================================================================
