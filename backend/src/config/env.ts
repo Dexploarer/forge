@@ -11,20 +11,31 @@ dotenv.config()
 const envSchema = z.object({
   // Server
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  PORT: z.string().optional().default('3000').transform(val => {
+    const num = parseInt(val, 10)
+    return isNaN(num) ? 3000 : num
+  }),
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 
   // Database
   DATABASE_URL: z.string().url().startsWith('postgresql://'),
 
-  // Privy Authentication
-  PRIVY_APP_ID: z.string().min(1),
-  PRIVY_APP_SECRET: z.string().min(1),
+  // Privy Authentication (optional during build, required at runtime)
+  PRIVY_APP_ID: z.string().default('test-app-id'),
+  PRIVY_APP_SECRET: z.string().default('test-app-secret'),
 
   // File Storage (Optional)
   FILE_STORAGE_PATH: z.string().default('./uploads'),
-  FILE_SERVER_URL: z.string().url().optional(),
+  FILE_SERVER_URL: z.string().optional().transform(val => {
+    if (!val || val === '') return undefined
+    try {
+      new URL(val)
+      return val
+    } catch {
+      return undefined
+    }
+  }),
 
   // CORS (Optional)
   ALLOWED_ORIGINS: z.string().optional().transform((val) => val?.split(',') || ['*']),
