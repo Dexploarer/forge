@@ -81,6 +81,13 @@ const envSchema = z.object({
   MINIO_ROOT_PASSWORD: z.string().optional(),
   MINIO_PORT: z.coerce.number().int().min(1).max(65535).optional(),
   MINIO_USE_SSL: z.coerce.boolean().default(false),
+
+  // imgproxy Configuration
+  IMGPROXY_URL: z.string().optional(), // imgproxy server URL (e.g., imgproxy-staging.up.railway.app)
+  IMGPROXY_KEY: z.string().optional(), // HMAC key for URL signing (hex)
+  IMGPROXY_SALT: z.string().optional(), // HMAC salt for URL signing (hex)
+  IMGPROXY_MAX_SRC_RESOLUTION: z.coerce.number().optional().default(16.8), // Max megapixels
+  IMGPROXY_ENABLED: z.coerce.boolean().default(true), // Enable/disable imgproxy
 })
 
 // =====================================================

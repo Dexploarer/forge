@@ -7,6 +7,8 @@ import { fileStorageService } from '../services/file.service'
 import { fileServerClient } from '../services/file-server-client.service'
 import { minioStorageService } from '../services/minio.service'
 import { processImageGeneration } from '../services/image-generation.processor'
+import { imgproxyService } from '../services/imgproxy.service'
+import { getImageVariants, getThumbnailUrl, getOptimizedUrl } from '../utils/image-url'
 
 const assetRoutes: FastifyPluginAsync = async (fastify) => {
   // List assets
@@ -32,6 +34,8 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
             status: z.enum(['draft', 'processing', 'published', 'failed']),
             visibility: z.enum(['private', 'public']),
             fileUrl: z.string().nullable(),
+            thumbnailUrl: z.string().optional(),
+            optimizedUrl: z.string().optional(),
             createdAt: z.string().datetime(),
           })),
           pagination: z.object({
@@ -93,10 +97,17 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const total = Number(countResult[0]?.count ?? 0)
 
     return {
-      assets: assetsList.map(asset => ({
-        ...asset,
-        createdAt: asset.createdAt.toISOString(),
-      })),
+      assets: assetsList.map(asset => {
+        const metadata = asset.metadata as Record<string, any>
+        const imgproxyData = metadata?.imgproxy
+
+        return {
+          ...asset,
+          createdAt: asset.createdAt.toISOString(),
+          thumbnailUrl: imgproxyData?.thumbnailUrl,
+          optimizedUrl: imgproxyData?.optimizedUrl,
+        }
+      }),
       pagination: { page, limit, total }
     }
   })
@@ -124,6 +135,15 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
             mimeType: z.string().nullable(),
             metadata: z.record(z.string(), z.any()),
             tags: z.array(z.string()).default([]),
+            thumbnailUrl: z.string().optional(),
+            optimizedUrl: z.string().optional(),
+            variants: z.object({
+              small: z.string(),
+              medium: z.string(),
+              large: z.string(),
+              webp: z.string().optional(),
+              avif: z.string().optional(),
+            }).optional(),
             createdAt: z.string().datetime(),
             updatedAt: z.string().datetime(),
             owner: z.object({
@@ -162,7 +182,18 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    return { asset }
+    // Add imgproxy data if available
+    const metadata = asset.metadata as Record<string, any>
+    const imgproxyData = metadata?.imgproxy
+
+    return {
+      asset: {
+        ...asset,
+        thumbnailUrl: imgproxyData?.thumbnailUrl,
+        optimizedUrl: imgproxyData?.optimizedUrl,
+        variants: imgproxyData?.variants,
+      }
+    }
   })
 
   // Create asset
@@ -374,10 +405,32 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       )
     }
 
+    // Generate imgproxy URLs for image assets
+    const isImage = data.mimetype.startsWith('image/')
+    const sourceUrl = minioData?.url || localFileData?.url || ''
+    const imgproxyMetadata: Record<string, any> = {}
+
+    if (isImage && imgproxyService.isAvailable()) {
+      const variants = getImageVariants(sourceUrl)
+      if (variants) {
+        imgproxyMetadata.imgproxy = {
+          thumbnailUrl: variants.thumbnail,
+          optimizedUrl: getOptimizedUrl(sourceUrl, data.mimetype) || sourceUrl,
+          variants: {
+            small: variants.small,
+            medium: variants.medium,
+            large: variants.large,
+            webp: variants.webp,
+            avif: variants.avif,
+          },
+        }
+      }
+    }
+
     const [updatedAsset] = await fastify.db
       .update(assets)
       .set({
-        fileUrl: minioData?.url || localFileData?.url || '',
+        fileUrl: sourceUrl,
         fileSize: buffer.length,
         mimeType: data.mimetype,
         status: 'published',
@@ -394,6 +447,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
             localUrl: localFileData.url,
           }),
           storageMode: minioData ? 'minio' : 'local',
+          ...imgproxyMetadata,
         }
       })
       .where(eq(assets.id, id))
