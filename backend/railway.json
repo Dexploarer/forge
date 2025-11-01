@@ -7,7 +7,7 @@
   "deploy": {
     "startCommand": "bun run db:migrate && bun run start",
     "healthcheckPath": "/health",
-    "healthcheckTimeout": 100,
+    "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
