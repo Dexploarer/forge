@@ -6,7 +6,7 @@ bun.lockb
 .env
 .env.local
 .env.*.local
-
+.env.production
 # Build output
 dist/
 build/
@@ -38,3 +38,4 @@ Thumbs.db
 # Test coverage
 coverage/
 .nyc_output/
+*.backup
