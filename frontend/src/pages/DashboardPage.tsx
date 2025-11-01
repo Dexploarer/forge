@@ -1,7 +1,38 @@
+import { useEffect } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+
 export default function DashboardPage() {
-  const { ready, authenticated, user, logout } = usePrivy()
+  const { ready, authenticated, user, logout, getAccessToken } = usePrivy()
+
+  // Sync user with backend on mount
+  useEffect(() => {
+    const syncUser = async () => {
+      if (!authenticated) return
+
+      try {
+        const token = await getAccessToken()
+        const response = await fetch(`${API_URL}/api/auth/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          console.error('[DashboardPage] Failed to sync user with backend:', response.statusText)
+        } else {
+          console.log('[DashboardPage] User synced with backend successfully')
+        }
+      } catch (error) {
+        console.error('[DashboardPage] Error syncing user:', error)
+      }
+    }
+
+    syncUser()
+  }, [authenticated, getAccessToken])
 
   // Redirect to login if not authenticated
   if (ready && !authenticated) {
