@@ -2,6 +2,7 @@
  * API utility functions for making authenticated requests
  */
 
+import { useCallback } from 'react'
 import { usePrivy } from '@privy-io/react-auth'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -27,7 +28,8 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
 export function useApiFetch() {
   const { getAccessToken } = usePrivy()
 
-  return async (endpoint: string, options: RequestInit = {}) => {
+  // Memoize the fetch function to prevent re-renders
+  return useCallback(async (endpoint: string, options: RequestInit = {}) => {
     const token = await getAccessToken()
     const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`
 
@@ -40,5 +42,5 @@ export function useApiFetch() {
       },
       credentials: 'include',
     })
-  }
+  }, [getAccessToken])
 }
