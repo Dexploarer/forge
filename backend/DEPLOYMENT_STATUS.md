@@ -26,7 +26,7 @@
 
 **Status:** ✅ **FIXED** - Committed (commit: `02c4c9b`, improved in `4693393`)
 
-### 3. Fixed Railway Healthcheck Failure
+### 3. Fixed Railway Healthcheck Failure - Script Issues
 **Problem:** Healthcheck was timing out after previous fix
 - Bash script approach had execution/permission issues on Railway
 
@@ -37,7 +37,25 @@
 
 **Status:** ✅ **FIXED** - Committed and pushed (commit: `4693393`)
 
-### 4. Qdrant Integration Complete
+### 4. Fixed Railway Healthcheck Failure - Timeout Too Short
+**Problem:** Healthcheck still failing with 100-second timeout
+- Database migrations may take longer than 100 seconds to complete
+- Server can't respond to healthcheck until migrations finish
+
+**Research Findings:**
+- Railway default healthcheck timeout is 300 seconds (5 minutes)
+- Running migrations in startCommand is recommended Railway practice
+- IPv6 (`::`) requirement was fixed in Railway v2 - `0.0.0.0` works fine
+- Fastify + Bun compatibility issues mostly resolved in Bun v1.2.6+
+
+**Solution:** Increased healthcheck timeout:
+- Changed `healthcheckTimeout` from 100 to 300 seconds
+- Gives migrations adequate time to complete before healthcheck
+- Matches Railway's default/recommended timeout
+
+**Status:** ✅ **FIXED** - Committed and pushed (commit: `1c210ba`)
+
+### 5. Qdrant Integration Complete
 All Qdrant code was already committed in previous commit (`6cc6536`):
 
 ✅ **Services Updated:**
