@@ -1,7 +1,0 @@
----
-description: When working in the @apps/*
-alwaysApply: false
----
-- **Production API**: https://api-fastify-production.up.railway.app
-- **Frontend**: https://frontend-production-a79f.up.railway.app
-- **Authentication**: Privy (requires active auth token in Authorization header)

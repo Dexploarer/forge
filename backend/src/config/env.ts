@@ -44,6 +44,8 @@ const envSchema = z.object({
   // Qdrant Vector Database
   QDRANT_URL: z.string().url().optional(),
   QDRANT_API_KEY: z.string().optional(),
+  QDRANT_PRIVATE_DOMAIN: z.string().optional(), // Railway provides this
+  QDRANT_PORT: z.coerce.number().int().min(1).max(65535).optional(), // Railway provides this
 
   // Vercel AI Gateway (unified access to all AI providers)
   AI_GATEWAY_API_KEY: z.string().optional(),
@@ -58,6 +60,16 @@ const envSchema = z.object({
   // FFmpeg Configuration (Optional - will use system ffmpeg if not specified)
   FFMPEG_PATH: z.string().optional(),
   FFPROBE_PATH: z.string().optional(),
+
+  // MinIO Configuration
+  MINIO_ENDPOINT: z.string().optional(), // Can be derived from PRIVATE or PUBLIC endpoint
+  MINIO_PRIVATE_ENDPOINT: z.string().optional(),
+  MINIO_PUBLIC_ENDPOINT: z.string().optional(),
+  MINIO_PUBLIC_HOST: z.string().optional(),
+  MINIO_ROOT_USER: z.string().optional(),
+  MINIO_ROOT_PASSWORD: z.string().optional(),
+  MINIO_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  MINIO_USE_SSL: z.coerce.boolean().default(false),
 })
 
 // =====================================================

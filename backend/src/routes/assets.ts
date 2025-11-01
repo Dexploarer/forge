@@ -5,6 +5,7 @@ import { assets } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
 import { fileStorageService } from '../services/file.service'
 import { fileServerClient } from '../services/file-server-client.service'
+import { minioStorageService } from '../services/minio.service'
 import { processImageGeneration } from '../services/image-generation.processor'
 
 const assetRoutes: FastifyPluginAsync = async (fastify) => {
@@ -332,47 +333,67 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const maxSize = 50 * 1024 * 1024
     const buffer = await data.toBuffer()
 
-    if (!fileStorageService.validateFileSize(buffer.length, maxSize)) {
+    if (!minioStorageService.validateFileSize(buffer.length, maxSize)) {
       throw new ValidationError('File too large (max 50MB)')
     }
 
+    // Delete old file if exists
     if (asset.fileUrl) {
-      await fileStorageService.deleteFile(asset.fileUrl)
+      // Try to delete from MinIO first (if path looks like bucket/filename)
+      if (asset.fileUrl.includes('/') && !asset.fileUrl.startsWith('http')) {
+        try {
+          await minioStorageService.deleteFileByPath(asset.fileUrl)
+        } catch (error) {
+          fastify.log.warn({ error }, 'Failed to delete old file from MinIO')
+        }
+      }
     }
 
-    // Save to local storage
-    const fileData = await fileStorageService.saveFile(
-      buffer,
-      data.mimetype,
-      data.filename
-    )
+    // Upload to MinIO (primary storage)
+    let minioData: { path: string; url: string; filename: string; bucket: string } | null = null
+    if (minioStorageService.isAvailable()) {
+      try {
+        minioData = await minioStorageService.uploadFile(
+          buffer,
+          data.mimetype,
+          data.filename
+        )
+      } catch (minioError) {
+        fastify.log.error({ error: minioError }, '[Assets] MinIO upload failed')
+        throw new ValidationError('Failed to upload file to storage')
+      }
+    }
 
-    // Try to upload to file server (optional)
-    let uploadResult: { url: string } | null = null
-    try {
-      uploadResult = await fileServerClient.uploadFile({
+    // Fallback to local storage if MinIO not available
+    let localFileData: { path: string; url: string; filename: string } | null = null
+    if (!minioData) {
+      localFileData = await fileStorageService.saveFile(
         buffer,
-        filename: data.filename,
-        mimeType: data.mimetype
-      })
-    } catch (uploadError) {
-      fastify.log.warn({ error: uploadError }, '[Assets] File server upload failed, using local storage only')
+        data.mimetype,
+        data.filename
+      )
     }
 
     const [updatedAsset] = await fastify.db
       .update(assets)
       .set({
-        fileUrl: uploadResult?.url || fileData.url,
+        fileUrl: minioData?.url || localFileData?.url || '',
         fileSize: buffer.length,
         mimeType: data.mimetype,
         status: 'published',
         updatedAt: new Date(),
         publishedAt: new Date(),
         metadata: {
-          localPath: fileData.path,
-          localUrl: fileData.url,
-          remoteUrl: uploadResult?.url || null,
-          storageMode: uploadResult ? 'dual' : 'local-only',
+          ...(minioData && {
+            minioBucket: minioData.bucket,
+            minioPath: minioData.path,
+            minioUrl: minioData.url,
+          }),
+          ...(localFileData && {
+            localPath: localFileData.path,
+            localUrl: localFileData.url,
+          }),
+          storageMode: minioData ? 'minio' : 'local',
         }
       })
       .where(eq(assets.id, id))
@@ -409,8 +430,27 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ForbiddenError('Only the owner or admin can delete this asset')
     }
 
+    // Delete file from storage
     if (asset.fileUrl) {
-      await fileStorageService.deleteFile(asset.fileUrl)
+      const metadata = asset.metadata as Record<string, any>
+
+      // Delete from MinIO if stored there
+      if (metadata?.minioBucket && metadata?.minioPath) {
+        try {
+          await minioStorageService.deleteFileByPath(metadata.minioPath)
+        } catch (error) {
+          fastify.log.warn({ error }, 'Failed to delete file from MinIO')
+        }
+      }
+
+      // Delete from local storage if it exists
+      if (metadata?.localPath) {
+        try {
+          await fileStorageService.deleteFile(metadata.localPath)
+        } catch (error) {
+          fastify.log.warn({ error }, 'Failed to delete local file')
+        }
+      }
     }
 
     await fastify.db.delete(assets).where(eq(assets.id, id))

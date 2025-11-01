@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { eq, and, or, desc, sql } from 'drizzle-orm'
 import { soundEffects } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
-import { fileStorageService } from '../services/file.service'
-import { fileServerClient } from '../services/file-server-client.service'
+import { minioStorageService } from '../services/file.service'
+import { minioStorageService } from '../services/file-server-client.service'
 import { audioProcessorService } from '../services/audio-processor.service'
 import { SoundEffectsService } from '../services/sound-effects.service'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -334,23 +334,23 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('No file uploaded')
     }
 
-    if (!fileStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
+    if (!minioStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
       throw new ValidationError('Invalid file type for sound effect')
     }
 
     const maxSize = 20 * 1024 * 1024 // 20MB
     const buffer = await data.toBuffer()
 
-    if (!fileStorageService.validateFileSize(buffer.length, maxSize)) {
+    if (!minioStorageService.validateFileSize(buffer.length, maxSize)) {
       throw new ValidationError('File too large (max 20MB)')
     }
 
     if (sfx.audioUrl) {
-      await fileStorageService.deleteFile(sfx.audioUrl)
+      await minioStorageService.deleteFile(sfx.audioUrl)
     }
 
     // Save to local storage
-    const fileData = await fileStorageService.saveFile(
+    const fileData = await minioStorageService.saveFile(
       buffer,
       data.mimetype,
       data.filename
@@ -359,7 +359,7 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     // Try to upload to file server (optional)
     let uploadResult: { url: string } | null = null
     try {
-      uploadResult = await fileServerClient.uploadFile({
+      uploadResult = await minioStorageService.uploadFile({
         buffer,
         filename: data.filename,
         mimeType: data.mimetype
@@ -445,7 +445,7 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       })
 
       // Save to local storage
-      const localFile = await fileStorageService.saveFile(
+      const localFile = await minioStorageService.saveFile(
         audioBuffer,
         'audio/mpeg',
         `sfx-${Date.now()}.mp3`
@@ -454,7 +454,7 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       // Try to upload to file server (optional)
       let uploadResult: { url: string } | null = null
       try {
-        uploadResult = await fileServerClient.uploadFile({
+        uploadResult = await minioStorageService.uploadFile({
           buffer: audioBuffer,
           filename: `sfx-${Date.now()}.mp3`,
           mimeType: 'audio/mpeg'
@@ -646,7 +646,7 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     if (sfx.audioUrl) {
-      await fileStorageService.deleteFile(sfx.audioUrl)
+      await minioStorageService.deleteFile(sfx.audioUrl)
     }
 
     await fastify.db.delete(soundEffects).where(eq(soundEffects.id, id))

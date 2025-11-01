@@ -3,8 +3,7 @@ import { z } from 'zod'
 import { eq, and, or, desc, sql } from 'drizzle-orm'
 import { musicTracks } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
-import { fileStorageService } from '../services/file.service'
-import { fileServerClient } from '../services/file-server-client.service'
+import { minioStorageService } from '../services/minio.service'
 import { audioProcessorService } from '../services/audio-processor.service'
 import { MusicService } from '../services/music.service'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -336,40 +335,31 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('No file uploaded')
     }
 
-    if (!fileStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
+    if (!minioStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
       throw new ValidationError('Invalid file type for music')
     }
 
     const maxSize = 100 * 1024 * 1024 // 100MB
     const buffer = await data.toBuffer()
 
-    if (!fileStorageService.validateFileSize(buffer.length, maxSize)) {
+    if (!minioStorageService.validateFileSize(buffer.length, maxSize)) {
       throw new ValidationError('File too large (max 100MB)')
     }
 
     // Delete old file if exists
     if (track.audioUrl) {
-      await fileStorageService.deleteFile(track.audioUrl)
+      const metadata = track.metadata as Record<string, any>
+      if (metadata?.minioPath) {
+        await minioStorageService.deleteFileByPath(metadata.minioPath)
+      }
     }
 
-    // Save to local storage
-    const fileData = await fileStorageService.saveFile(
+    // Upload to MinIO
+    const minioData = await minioStorageService.uploadFile(
       buffer,
       data.mimetype,
       data.filename
     )
-
-    // Try to upload to file server (optional)
-    let uploadResult: { url: string } | null = null
-    try {
-      uploadResult = await fileServerClient.uploadFile({
-        buffer,
-        filename: data.filename,
-        mimeType: data.mimetype
-      })
-    } catch (uploadError) {
-      fastify.log.warn({ error: uploadError }, '[Music] File server upload failed, using local storage only')
-    }
 
     // Extract metadata
     const metadata = await audioProcessorService.extractMetadata(buffer)
@@ -377,7 +367,7 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
     const [updatedTrack] = await fastify.db
       .update(musicTracks)
       .set({
-        audioUrl: uploadResult?.url || fileData.url,
+        audioUrl: minioData.url,
         fileSize: buffer.length,
         format: data.filename.split('.').pop() || 'mp3',
         duration: metadata.duration,
@@ -385,10 +375,10 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
         status: 'published',
         updatedAt: new Date(),
         metadata: {
-          localPath: fileData.path,
-          localUrl: fileData.url,
-          remoteUrl: uploadResult?.url || null,
-          storageMode: uploadResult ? 'dual' : 'local-only',
+          minioBucket: minioData.bucket,
+          minioPath: minioData.path,
+          minioUrl: minioData.url,
+          storageMode: 'minio',
         }
       })
       .where(eq(musicTracks.id, id))
@@ -459,24 +449,12 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
         outputFormat: undefined,
       })
 
-      // Save to local storage
-      const localFile = await fileStorageService.saveFile(
+      // Upload to MinIO
+      const minioData = await minioStorageService.uploadFile(
         audioBuffer,
         'audio/mpeg',
         `music-${Date.now()}.mp3`
       )
-
-      // Try to upload to file server (optional)
-      let uploadResult: { url: string } | null = null
-      try {
-        uploadResult = await fileServerClient.uploadFile({
-          buffer: audioBuffer,
-          filename: `music-${Date.now()}.mp3`,
-          mimeType: 'audio/mpeg'
-        })
-      } catch (uploadError) {
-        fastify.log.warn({ error: uploadError }, '[Music] File server upload failed, using local storage only')
-      }
 
       // Extract metadata
       const metadata = await audioProcessorService.extractMetadata(audioBuffer)
@@ -495,17 +473,17 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
         generationPrompt: data.prompt,
         generationService: 'elevenlabs',
         generationParams: data,
-        audioUrl: uploadResult?.url || localFile.url,
+        audioUrl: minioData.url,
         fileSize: audioBuffer.length,
         format: 'mp3',
         duration: metadata.duration,
         status: 'published',
         tags: [],
         metadata: {
-          localPath: localFile.path,
-          localUrl: localFile.url,
-          remoteUrl: uploadResult?.url || null,
-          storageMode: uploadResult ? 'dual' : 'local-only',
+          minioBucket: minioData.bucket,
+          minioPath: minioData.path,
+          minioUrl: minioData.url,
+          storageMode: 'minio',
         },
       }).returning()
 
@@ -605,7 +583,7 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     if (track.audioUrl) {
-      await fileStorageService.deleteFile(track.audioUrl)
+      await minioStorageService.deleteFile(track.audioUrl)
     }
 
     await fastify.db.delete(musicTracks).where(eq(musicTracks.id, id))

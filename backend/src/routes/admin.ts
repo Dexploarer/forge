@@ -335,6 +335,119 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
     return { activity }
   })
+
+  // One-time Qdrant setup endpoint
+  fastify.post('/setup-qdrant', {
+    preHandler: [fastify.authenticate, requireAdmin],
+    schema: {
+      description: 'Initialize Qdrant collections and embed manifest data (run once)',
+      summary: 'Setup Qdrant',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: z.object({
+          success: z.boolean(),
+          message: z.string(),
+          collections: z.number(),
+          itemsEmbedded: z.number(),
+        })
+      }
+    }
+  }, async (_request, reply) => {
+    try {
+      fastify.log.info('🔵 Admin triggered Qdrant setup')
+
+      const { qdrantService } = await import('../services/qdrant.service')
+      const { db } = await import('../database/db')
+      const { previewManifests } = await import('../database/schema')
+      const { isNull } = await import('drizzle-orm')
+      const { ContentEmbedderService } = await import('../services/content-embedder.service')
+      const { CONTENT_TYPES } = await import('../services/qdrant.service')
+
+      const contentEmbedder = new ContentEmbedderService()
+
+      // Initialize Qdrant collections
+      fastify.log.info('Initializing Qdrant collections...')
+      await qdrantService.initializeCollections()
+
+      const stats = await qdrantService.getAllStats()
+      const collectionCount = Object.keys(stats).length
+      fastify.log.info(`Created ${collectionCount} collections`)
+
+      // Load and embed manifests
+      fastify.log.info('Loading manifests from database...')
+      const manifests = await db.query.previewManifests.findMany({
+        where: isNull(previewManifests.userId),
+      })
+
+      fastify.log.info(`Found ${manifests.length} manifests to embed`)
+
+      let totalEmbedded = 0
+
+      for (const manifest of manifests) {
+        const manifestType = manifest.manifestType
+        const items = Array.isArray(manifest.content) ? manifest.content : [manifest.content]
+
+        if (items.length === 0) continue
+
+        // Map manifest types to content types
+        const typeMap: Record<string, string> = {
+          items: 'ITEM',
+          npcs: 'NPC',
+          music: 'ASSET',
+          biomes: 'ASSET',
+          zones: 'ASSET',
+          world: 'ASSET',
+          banks: 'ASSET',
+          stores: 'ASSET',
+          avatars: 'CHARACTER',
+          asset_requirements: 'MANIFEST',
+          generation_configs: 'MANIFEST',
+          resources: 'ITEM',
+          buildings: 'ASSET',
+        }
+
+        const contentType = typeMap[manifestType]
+        if (!contentType) continue
+
+        const batchItems = items.map((item: any, index: number) => ({
+          id: item.id || item.name || `${manifestType}_${index}`,
+          data: item,
+          metadata: {
+            manifestType,
+            name: item.name,
+            type: item.type || item.category,
+            id: item.id,
+          },
+        }))
+
+        await contentEmbedder.embedBatch(
+          (CONTENT_TYPES as any)[contentType],
+          batchItems
+        )
+
+        totalEmbedded += items.length
+        fastify.log.info(`Embedded ${items.length} ${manifestType} items`)
+      }
+
+      fastify.log.info(`✅ Qdrant setup complete: ${collectionCount} collections, ${totalEmbedded} items embedded`)
+
+      return {
+        success: true,
+        message: 'Qdrant setup complete',
+        collections: collectionCount,
+        itemsEmbedded: totalEmbedded,
+      }
+    } catch (error: any) {
+      fastify.log.error('Failed to setup Qdrant:', error)
+      return reply.status(500).send({
+        success: false,
+        message: error.message,
+        collections: 0,
+        itemsEmbedded: 0,
+      })
+    }
+  })
 }
 
 export default adminRoutes

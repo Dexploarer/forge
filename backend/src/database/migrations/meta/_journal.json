@@ -43,6 +43,13 @@
       "when": 1761965256889,
       "tag": "0005_adorable_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1761997655290,
+      "tag": "0006_mysterious_human_fly",
+      "breakpoints": true
     }
   ]
 }

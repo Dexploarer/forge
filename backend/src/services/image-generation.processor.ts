@@ -2,8 +2,7 @@ import { AISDKService } from './ai-sdk.service'
 import { db } from '../database/db'
 import { assets } from '../database/schema'
 import { eq } from 'drizzle-orm'
-import { fileStorageService } from './file.service'
-import { fileServerClient } from './file-server-client.service'
+import { minioStorageService } from './minio.service'
 
 interface ImageGenerationParams {
   prompt: string
@@ -44,42 +43,29 @@ export async function processImageGeneration(
     const base64Data = response.imageUrl.split(',')[1]!
     const buffer = Buffer.from(base64Data, 'base64')
 
-    console.log(`[Image-Gen] Image ready (${buffer.length} bytes), saving locally...`)
+    console.log(`[Image-Gen] Image ready (${buffer.length} bytes), uploading to MinIO...`)
 
-    // Save to local storage
-    const localFile = await fileStorageService.saveFile(
+    // Upload to MinIO
+    const minioData = await minioStorageService.uploadFile(
       buffer,
       'image/png',
       `image-${assetId}.png`
     )
 
-    console.log(`[Image-Gen] Saved locally: ${localFile.path}`)
+    console.log(`[Image-Gen] Uploaded to MinIO: ${minioData.url}`)
 
-    // Try to upload to file server (optional)
-    let uploadResult: { url: string } | null = null
-    try {
-      uploadResult = await fileServerClient.uploadFile({
-        buffer,
-        filename: `image-${assetId}.png`,
-        mimeType: 'image/png'
-      })
-      console.log(`[Image-Gen] Uploaded to file server: ${uploadResult.url}`)
-    } catch (uploadError) {
-      console.warn(`[Image-Gen] File server upload failed, using local storage only:`, uploadError)
-    }
-
-    // Update asset with results (use remote URL if available, otherwise local)
+    // Update asset with results
     await dbInstance.update(assets)
       .set({
         status: 'published',
-        fileUrl: uploadResult?.url || localFile.url,
+        fileUrl: minioData.url,
         fileSize: buffer.length,
         mimeType: 'image/png',
         metadata: {
-          localPath: localFile.path,
-          localUrl: localFile.url,
-          remoteUrl: uploadResult?.url || null,
-          storageMode: uploadResult ? 'dual' : 'local-only',
+          minioBucket: minioData.bucket,
+          minioPath: minioData.path,
+          minioUrl: minioData.url,
+          storageMode: 'minio',
           prompt: response.prompt,
           originalPrompt: params.prompt,
           model: response.metadata.model,
@@ -92,7 +78,7 @@ export async function processImageGeneration(
       })
       .where(eq(assets.id, assetId))
 
-    console.log(`[Image-Gen] Asset ${assetId} completed with ${uploadResult ? 'dual' : 'local-only'} storage`)
+    console.log(`[Image-Gen] Asset ${assetId} completed with MinIO storage`)
   } catch (error) {
     console.error(`[Image-Gen] Error ${assetId}:`, error)
 

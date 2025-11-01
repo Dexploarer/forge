@@ -7,7 +7,7 @@ import { env } from '../config/env'
 import { MusicService } from './music.service'
 import { SoundEffectsService } from './sound-effects.service'
 import { ElevenLabsService } from './elevenlabs.service'
-import { fileStorageService } from './file.service'
+import { minioStorageService } from './minio.service'
 
 export interface MusicParams {
   prompt: string
@@ -94,12 +94,13 @@ export class AudioGenerationService {
         outputFormat: undefined,
       })
 
-      // Save to file storage
-      const { url } = await fileStorageService.saveFile(
+      // Upload to MinIO
+      const minioData = await minioStorageService.uploadFile(
         audioBuffer,
         'audio/mpeg',
         `music-${Date.now()}.mp3`
       )
+      const url = minioData.url
 
       // Estimate duration based on file size (rough approximation for MP3 at 128kbps)
       const estimatedDuration = Math.round((audioBuffer.length * 8) / (128 * 1024))
@@ -149,12 +150,13 @@ export class AudioGenerationService {
         promptInfluence: 0.3, // Default prompt influence
       })
 
-      // Save to file storage
-      const { url } = await fileStorageService.saveFile(
+      // Upload to MinIO
+      const minioData = await minioStorageService.uploadFile(
         audioBuffer,
         'audio/mpeg',
         `sfx-${Date.now()}.mp3`
       )
+      const url = minioData.url
 
       // Estimate duration based on file size (rough approximation for MP3 at 128kbps)
       const estimatedDuration = Math.round((audioBuffer.length * 8) / (128 * 1024))
@@ -217,12 +219,13 @@ export class AudioGenerationService {
         },
       })
 
-      // Save to file storage
-      const { url } = await fileStorageService.saveFile(
+      // Upload to MinIO
+      const minioData = await minioStorageService.uploadFile(
         audioBuffer,
         'audio/mpeg',
         `voice-${Date.now()}.mp3`
       )
+      const url = minioData.url
 
       // Estimate duration based on file size (rough approximation for MP3 at 128kbps)
       const estimatedDuration = Math.round((audioBuffer.length * 8) / (128 * 1024))

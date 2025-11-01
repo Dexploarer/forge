@@ -5,7 +5,8 @@
 
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { EmbeddingsService } from '../services/embeddings.service'
+import { ContentEmbedderService } from '../services/content-embedder.service'
+import { qdrantService } from '../services/qdrant.service'
 
 // ============================================================================
 // Schemas
@@ -70,7 +71,7 @@ const ErrorResponseSchema = z.object({
 // ============================================================================
 
 const embeddingsRoutes: FastifyPluginAsync = async (server) => {
-  const embeddingsService = new EmbeddingsService()
+  const contentEmbedder = new ContentEmbedderService()
 
   /**
    * GET /api/embeddings/search
@@ -94,16 +95,11 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
 
       server.log.info(`[Embeddings API] Searching for: "${query}" (type: ${contentType || 'all'}, limit: ${limit})`)
 
-      // Get projectId from auth context
-      const projectId = (request.user as any)?.projectId || 'default'
-
-      const results = await embeddingsService.findSimilar(
-        server.db,
-        query,
-        projectId,
+      const results = await contentEmbedder.findSimilar(query, {
+        contentType: contentType as any || null,
+        limit,
         threshold,
-        limit
-      )
+      })
 
       const duration = Date.now() - startTime
 
@@ -146,17 +142,15 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
     const startTime = Date.now()
 
     try {
-      const { query, contentType, limit, threshold, projectId } = SearchBodySchema.parse(request.body)
+      const { query, contentType, limit, threshold } = SearchBodySchema.parse(request.body)
 
       server.log.info(`[Embeddings API] Searching for: "${query}" (type: ${contentType || 'all'}, limit: ${limit})`)
 
-      const results = await embeddingsService.findSimilar(
-        server.db,
-        query,
-        projectId,
+      const results = await contentEmbedder.findSimilar(query, {
+        contentType: contentType as any || null,
+        limit,
         threshold,
-        limit
-      )
+      })
 
       const duration = Date.now() - startTime
 
@@ -209,39 +203,24 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
     const startTime = Date.now()
 
     try {
-      const { query, limit, threshold, projectId } = BuildContextSchema.parse(request.body)
+      const { query, limit, threshold } = BuildContextSchema.parse(request.body)
 
       server.log.info(`[Embeddings API] Building context for: "${query}"`)
 
-      const results = await embeddingsService.findSimilar(
-        server.db,
-        query,
-        projectId,
+      const contextResult = await contentEmbedder.buildContext(query, {
+        limit,
         threshold,
-        limit
-      )
-
-      // Build context from results
-      const hasContext = results.length > 0
-      const context = hasContext
-        ? results.map(r => `[${r.type}] ${r.content}`).join('\n\n')
-        : ''
-
-      const sources = results.map(r => ({
-        type: r.type,
-        id: r.id,
-        similarity: r.similarity
-      }))
+      })
 
       const duration = Date.now() - startTime
 
-      server.log.info(`[Embeddings API] Built context with ${sources.length} sources (${duration}ms)`)
+      server.log.info(`[Embeddings API] Built context with ${contextResult.sources.length} sources (${duration}ms)`)
 
       return {
         query,
-        hasContext,
-        context,
-        sources,
+        hasContext: contextResult.hasContext,
+        context: contextResult.context,
+        sources: contextResult.sources,
         duration
       }
     } catch (error: any) {
@@ -276,15 +255,9 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
     const startTime = Date.now()
 
     try {
-      server.log.info('[Embeddings API] Fetching stats')
+      server.log.info('[Embeddings API] Fetching stats from Qdrant')
 
-      // For now, return basic stats
-      // In production, this would query database for embedding counts by type
-      const stats = [
-        { type: 'lore', count: 0 },
-        { type: 'quest', count: 0 },
-        { type: 'npc', count: 0 }
-      ]
+      const stats = await contentEmbedder.getStats()
 
       const duration = Date.now() - startTime
 
@@ -334,23 +307,27 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
 
       server.log.info(`[Embeddings API] Embedding ${contentType}:${contentId}`)
 
-      // Extract text content to embed
-      const textContent = JSON.stringify(data)
-      await embeddingsService.embedText(textContent)
-
-      // In production, this would store the embedding in the database
-      // For now, we'll just return success
-      const embeddingId = `${contentType}_${contentId}_${Date.now()}`
+      // Use content-specific embedding methods
+      let result
+      if (contentType === 'lore') {
+        result = await contentEmbedder.embedLore(contentId, data)
+      } else if (contentType === 'quest') {
+        result = await contentEmbedder.embedQuest(contentId, data)
+      } else if (contentType === 'npc') {
+        result = await contentEmbedder.embedNPC(contentId, data)
+      } else {
+        throw new Error(`Unsupported content type: ${contentType}`)
+      }
 
       const duration = Date.now() - startTime
 
-      server.log.info(`[Embeddings API] Embedded ${contentType}:${contentId} (id=${embeddingId}, ${duration}ms)`)
+      server.log.info(`[Embeddings API] Embedded ${contentType}:${contentId} (${duration}ms)`)
 
       return {
         success: true,
         contentType,
         contentId,
-        embeddingId,
+        embeddingId: result?.id || contentId,
         duration
       }
     } catch (error: any) {
@@ -392,18 +369,20 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
 
       server.log.info(`[Embeddings API] Batch embedding ${items.length} ${contentType} items`)
 
-      // Extract all text content
-      const texts = items.map(item => JSON.stringify(item.data))
-      const embeddings = await embeddingsService.embedBatch(texts)
+      // Use batch embedding
+      const result = await contentEmbedder.embedBatch(
+        contentType as any,
+        items
+      )
 
       const duration = Date.now() - startTime
 
-      server.log.info(`[Embeddings API] Batch embedded ${embeddings.length} items (${duration}ms)`)
+      server.log.info(`[Embeddings API] Batch embedded ${result.count} items (${duration}ms)`)
 
       return {
-        success: true,
+        success: result.success,
         contentType,
-        count: embeddings.length,
+        count: result.count,
         duration
       }
     } catch (error: any) {
@@ -454,9 +433,7 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
 
       server.log.info(`[Embeddings API] Deleting embedding for ${contentType}:${contentId}`)
 
-      // In production, this would delete from database
-      // For now, we'll simulate success
-      const deleted = true
+      const deleted = await contentEmbedder.deleteEmbedding(contentType as any, contentId)
 
       const duration = Date.now() - startTime
 

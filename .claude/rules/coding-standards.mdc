@@ -1,0 +1,418 @@
+---
+alwaysApply: true
+globs: "*.ts,*.tsx"
+description: Forge Backend TypeScript coding standards and conventions
+---
+
+# Forge Backend Coding Standards
+
+## Core Principles
+
+### 1. KISS (Keep It Simple, Stupid)
+- One clear way to do each thing
+- No unnecessary abstractions
+- Code should be obvious, not clever
+- Prefer simple solutions over complex ones
+
+### 2. Production-First
+- Every line must be deployment-ready
+- NO TODO comments or placeholders in production code
+- Comprehensive error handling on all paths
+- Proper logging and monitoring built-in
+- Security by default
+
+### 3. Type Safety
+- TypeScript strict mode ALWAYS enabled
+- NO `any` types in production code
+- NO `unknown` without proper narrowing
+- Zod validation on ALL API inputs
+- Database enums for status fields
+- Explicit return types on public functions
+
+## TypeScript Conventions
+
+### Type Declarations
+```typescript
+// ✅ GOOD - Explicit, clear types
+interface User {
+  id: string
+  email: string
+  role: 'admin' | 'member' | 'guest'
+}
+
+// ❌ BAD - Using any
+function processData(data: any) { }
+
+// ✅ GOOD - Proper typing
+function processData(data: UserData): ProcessedResult { }
+```
+
+### Nullable Fields
+```typescript
+// ✅ GOOD - Explicit null, not undefined
+return {
+  thumbnailUrl: asset.thumbnailUrl ?? null,
+  description: asset.description ?? null
+}
+
+// ❌ BAD - Returning undefined
+return {
+  thumbnailUrl: asset.thumbnailUrl,
+  description: asset.description
+}
+```
+
+### Type Conversions
+```typescript
+// ✅ GOOD - SQL COUNT() returns string, convert to number
+const [{ count }] = await db.select({ count: sql<string>`count(*)` })
+const total = Number(count ?? 0)
+
+// ❌ BAD - Using string as number
+const total = count // string type!
+```
+
+## Error Handling
+
+### Error Throwing Pattern
+```typescript
+// ✅ GOOD - Throw typed errors, let global handler format
+import { NotFoundError, ForbiddenError } from '@/utils/errors'
+
+if (!resource) {
+  throw new NotFoundError('Resource not found')
+}
+
+if (!authorized) {
+  throw new ForbiddenError('Access denied')
+}
+
+// ❌ BAD - Sending responses directly in middleware
+if (!authorized) {
+  return reply.code(403).send({ error: 'Forbidden' })
+}
+```
+
+### Custom Error Classes
+Always use these standard error classes:
+- `AppError` - Base error class
+- `ValidationError` - Input validation failures
+- `UnauthorizedError` - Authentication failures
+- `ForbiddenError` - Authorization failures
+- `NotFoundError` - Resource not found
+- `ConflictError` - Duplicate resources
+
+### Error Responses
+```typescript
+// ✅ GOOD - Use 'message' field (matches AppError)
+{
+  statusCode: 404,
+  code: 'NOT_FOUND',
+  message: 'Resource not found'
+}
+
+// ❌ BAD - Using 'error' field inconsistently
+{
+  error: 'Resource not found'
+}
+```
+
+## Data Serialization
+
+### Date Handling
+```typescript
+// ✅ GOOD - Convert Date to ISO string
+return {
+  ...data,
+  createdAt: data.createdAt.toISOString(),
+  updatedAt: data.updatedAt.toISOString()
+}
+
+// ❌ BAD - Returning Date objects
+return {
+  ...data,
+  createdAt: data.createdAt, // Date object
+  updatedAt: data.updatedAt
+}
+```
+
+### Helper Function Pattern
+```typescript
+// Create reusable serialization helpers
+export function serializeTimestamps<T extends { createdAt: Date; updatedAt: Date }>(
+  obj: T
+): Omit<T, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string } {
+  return {
+    ...obj,
+    createdAt: obj.createdAt.toISOString(),
+    updatedAt: obj.updatedAt.toISOString()
+  }
+}
+```
+
+## Validation Patterns
+
+### Zod Schemas
+```typescript
+// ✅ GOOD - Comprehensive validation
+import { z } from 'zod'
+
+const CreateAssetSchema = z.object({
+  name: z.string().min(1).max(255),
+  description: z.string().optional(),
+  type: z.enum(['model', 'texture', 'audio']),
+  visibility: z.enum(['private', 'public'])
+})
+
+// Use in route
+server.post('/assets', {
+  schema: {
+    body: CreateAssetSchema,
+    response: {
+      200: AssetResponseSchema,
+      400: ErrorResponseSchema
+    }
+  }
+}, async (request, reply) => {
+  // request.body is fully typed!
+})
+```
+
+## Database Operations
+
+### Query Patterns
+```typescript
+// ✅ GOOD - Proper Drizzle usage
+const assets = await db.query.assets.findMany({
+  where: and(
+    eq(assets.ownerId, userId),
+    eq(assets.status, 'published')
+  ),
+  limit: 20,
+  offset: (page - 1) * 20
+})
+
+// ✅ GOOD - Count with proper conversion
+const [{ total }] = await db
+  .select({ total: sql<string>`count(*)::int` })
+  .from(assets)
+  .where(eq(assets.ownerId, userId))
+
+const count = Number(total)
+```
+
+### Cascading Operations
+Configure at schema level, not in code:
+```typescript
+// ✅ GOOD - Schema-level cascade
+export const teamMembers = pgTable('team_members', {
+  teamId: uuid('team_id')
+    .references(() => teams.id, { onDelete: 'cascade' })
+    .notNull()
+})
+```
+
+## Authorization Patterns
+
+### Ownership Checks
+```typescript
+// ✅ GOOD - Reusable helper pattern
+import { verifyOwnership } from '@/helpers/ownership'
+
+const asset = await verifyOwnership<Asset>(
+  server,
+  assets,
+  assetId,
+  request.user!.id,
+  'Asset'
+)
+```
+
+### Team Access Checks
+```typescript
+// ✅ GOOD - Dedicated helper
+import { verifyTeamMembership } from '@/helpers/team-access'
+
+await verifyTeamMembership(teamId, userId, db)
+```
+
+## Async Operations
+
+### Simple Async Pattern (NOT BullMQ)
+```typescript
+// ✅ GOOD - Return 202 immediately, process async
+const [asset] = await db.insert(assets).values({
+  status: 'processing',
+  ...params
+}).returning()
+
+reply.code(202).send({
+  taskId: asset.id,
+  statusUrl: `/api/assets/${asset.id}/status`
+})
+
+// DON'T await - let it run in background
+processAssetAsync(asset.id, params).catch(err => {
+  server.log.error({ err, assetId: asset.id }, 'Asset processing failed')
+})
+
+// ❌ BAD - Don't jump to BullMQ/Redis prematurely
+```
+
+### Background Processing
+```typescript
+async function processAssetAsync(assetId: string, params: any): Promise<void> {
+  try {
+    // Update progress
+    await db.update(assets)
+      .set({ metadata: { progress: 10 } })
+      .where(eq(assets.id, assetId))
+
+    // Do work
+    const result = await longRunningOperation(params)
+
+    // Mark complete
+    await db.update(assets)
+      .set({
+        status: 'published',
+        fileUrl: result.url
+      })
+      .where(eq(assets.id, assetId))
+  } catch (error) {
+    // Mark failed
+    await db.update(assets)
+      .set({ status: 'failed' })
+      .where(eq(assets.id, assetId))
+  }
+}
+```
+
+## File Naming Conventions
+
+- **Routes**: `kebab-case.ts` (e.g., `sound-effects.ts`, `api-keys.ts`)
+- **Services**: `kebab-case.service.ts` (e.g., `file-server-client.service.ts`)
+- **Helpers**: `kebab-case.ts` (e.g., `asset-url-mapper.ts`)
+- **Types**: `PascalCase` for interfaces and types
+- **Functions**: `camelCase` for function names
+- **Constants**: `SCREAMING_SNAKE_CASE` for true constants
+
+## Import Organization
+
+```typescript
+// 1. External dependencies
+import { FastifyPluginAsync } from 'fastify'
+import { z } from 'zod'
+
+// 2. Database schemas
+import { assets, users } from '@/database/schema'
+import { eq, and } from 'drizzle-orm'
+
+// 3. Services
+import { fileService } from '@/services/file.service'
+
+// 4. Helpers
+import { serializeTimestamps } from '@/helpers/serialization'
+
+// 5. Types
+import type { Asset } from '@/types'
+```
+
+## Code Organization
+
+### Route Files
+```typescript
+/**
+ * Asset Management Routes
+ * CRUD operations for 3D models, audio, and textures
+ */
+
+import type { FastifyPluginAsync } from 'fastify'
+import { z } from 'zod'
+
+// =====================================================
+// SCHEMAS
+// =====================================================
+
+const CreateAssetSchema = z.object({
+  // ...
+})
+
+// =====================================================
+// ROUTE REGISTRATION
+// =====================================================
+
+const assetRoutes: FastifyPluginAsync = async (server) => {
+  // Routes here
+}
+
+export default assetRoutes
+```
+
+## Critical "Don't Do This" Rules
+
+❌ **DON'T** use `any` or `unknown` types
+❌ **DON'T** leave TODO comments in production
+❌ **DON'T** send responses in middleware - throw errors
+❌ **DON'T** return undefined for nullable fields - use null
+❌ **DON'T** forget to convert SQL COUNT() to Number
+❌ **DON'T** forget date serialization in API responses
+❌ **DON'T** skip authorization checks
+❌ **DON'T** skip Zod validation
+❌ **DON'T** jump to complex infrastructure (BullMQ) prematurely
+❌ **DON'T** forget error handling on all paths
+
+## Performance Considerations
+
+### Database Connection Pool
+- Production: 20 connections
+- Development: 10 connections
+- Idle timeout: 30 seconds
+- Max lifetime: 30 minutes
+
+### API Limits
+- Body size: 10MB max
+- File upload: 50MB max
+- Connection timeout: 60 seconds
+
+### Efficient Queries
+- Always use indexes on foreign keys
+- Use pagination for list endpoints
+- Avoid N+1 queries with proper joins
+- Use GIN indexes for JSONB fields
+
+## Security Checklist
+
+Every endpoint must have:
+- ✅ Authentication check (if protected)
+- ✅ Authorization check (ownership/role)
+- ✅ Input validation (Zod schema)
+- ✅ SQL injection protection (Drizzle ORM)
+- ✅ Error handling (no leak of sensitive data)
+- ✅ Rate limiting (for expensive operations)
+
+## Logging Standards
+
+```typescript
+// ✅ GOOD - Structured logging
+server.log.error({
+  err: error,
+  userId: request.user?.id,
+  assetId,
+  operation: 'asset.delete'
+}, 'Failed to delete asset')
+
+// ✅ GOOD - Include context
+server.log.info({
+  userId: request.user!.id,
+  assetId: asset.id,
+  fileSize: asset.fileSize
+}, 'Asset created successfully')
+```
+
+## Testing Requirements
+
+- ALL features must have tests
+- NO mocks or spies - use real database
+- Use Fastify's `.inject()` for HTTP testing
+- Test both success and error cases
+- Tests must be production-ready code

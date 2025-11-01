@@ -13,8 +13,7 @@
 import { EventEmitter } from 'events'
 import { AISDKService } from './ai-sdk.service'
 import { MeshyService } from './meshy.service'
-import { FileServerClientService } from './file-server-client.service'
-import { fileStorageService } from './file.service'
+import { minioStorageService } from './minio.service'
 
 export interface PipelineConfig {
   name: string
@@ -75,14 +74,12 @@ export class GenerationService extends EventEmitter {
   private activePipelines: Map<string, PipelineStatus>
   private aiService: AISDKService
   private meshyService: MeshyService
-  private fileServerClient: FileServerClientService
 
   constructor() {
     super()
     this.activePipelines = new Map()
     this.aiService = new AISDKService()
     this.meshyService = new MeshyService()
-    this.fileServerClient = new FileServerClientService()
 
     // Check for required API keys
     if (!process.env.OPENAI_API_KEY || !process.env.MESHY_API_KEY) {
@@ -175,45 +172,31 @@ export class GenerationService extends EventEmitter {
           pipeline.config.style || 'game-ready'
         )
 
-        // Save image to both local and remote storage
+        // Save image to MinIO
         if (result.imageUrl.startsWith('data:')) {
           const base64Data = result.imageUrl.split(',')[1]!
           const buffer = Buffer.from(base64Data, 'base64')
 
-          // Keep the base64 data URL for Meshy (they can't access localhost)
+          // Keep the base64 data URL for Meshy (they can't access private storage)
           imageDataUrl = result.imageUrl
 
-          // Save to local storage
-          const localFile = await fileStorageService.saveFile(
+          // Upload to MinIO
+          const minioData = await minioStorageService.uploadFile(
             buffer,
             'image/png',
             `concept-${pipelineId}.png`
           )
-          console.log(`[GenerationService] Concept art saved locally: ${localFile.path}`)
+          console.log(`[GenerationService] Concept art uploaded to MinIO: ${minioData.url}`)
 
-          // Try to upload to file server (optional)
-          let uploadResult: { url: string } | null = null
-          try {
-            uploadResult = await this.fileServerClient.uploadFile({
-              buffer,
-              filename: `concept-${pipelineId}.png`,
-              mimeType: 'image/png'
-            })
-            console.log(`[GenerationService] Concept art uploaded to file server: ${uploadResult.url}`)
-          } catch (uploadError) {
-            console.warn(`[GenerationService] File server upload failed, using local storage only:`, uploadError)
-          }
-
-          // Use remote URL if available, otherwise local URL for API responses
-          imageUrl = uploadResult?.url || localFile.url
+          imageUrl = minioData.url
 
           return {
             imageUrl,
             imageDataUrl,
-            localPath: localFile.path,
-            localUrl: localFile.url,
-            remoteUrl: uploadResult?.url || null,
-            storageMode: uploadResult ? 'dual' : 'local-only',
+            minioBucket: minioData.bucket,
+            minioPath: minioData.path,
+            minioUrl: minioData.url,
+            storageMode: 'minio',
             originalImageUrl: result.imageUrl,
             prompt: result.prompt,
             metadata: result.metadata
@@ -261,36 +244,23 @@ export class GenerationService extends EventEmitter {
           const glbBuffer = await response.arrayBuffer()
           const buffer = Buffer.from(glbBuffer)
 
-          // Save to local storage
-          const localFile = await fileStorageService.saveFile(
+          // Upload to MinIO
+          const minioData = await minioStorageService.uploadFile(
             buffer,
             'model/gltf-binary',
             `model-${pipelineId}.glb`
           )
-          console.log(`[GenerationService] 3D model saved locally: ${localFile.path}`)
+          console.log(`[GenerationService] 3D model uploaded to MinIO: ${minioData.url}`)
 
-          // Try to upload to file server (optional)
-          let uploadResult: { url: string } | null = null
-          try {
-            uploadResult = await this.fileServerClient.uploadFile({
-              buffer,
-              filename: `model-${pipelineId}.glb`,
-              mimeType: 'model/gltf-binary'
-            })
-            console.log(`[GenerationService] 3D model uploaded to file server: ${uploadResult.url}`)
-          } catch (uploadError) {
-            console.warn(`[GenerationService] File server upload failed, using local storage only:`, uploadError)
-          }
-
-          modelUrl = uploadResult?.url || localFile.url
+          modelUrl = minioData.url
           thumbnailUrl = completedTask.result.thumbnailUrl
 
           return {
             modelUrl,
-            localPath: localFile.path,
-            localUrl: localFile.url,
-            remoteUrl: uploadResult?.url || null,
-            storageMode: uploadResult ? 'dual' : 'local-only',
+            minioBucket: minioData.bucket,
+            minioPath: minioData.path,
+            minioUrl: minioData.url,
+            storageMode: 'minio',
             thumbnailUrl,
             meshyTaskId: model3D.id
           }

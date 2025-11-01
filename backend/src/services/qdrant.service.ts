@@ -65,14 +65,31 @@ export class QdrantService {
   constructor(vectorSize: number = 1536) {
     this.vectorSize = vectorSize;
 
+    // Auto-construct Qdrant URL if not explicitly set
+    // Railway provides QDRANT_PRIVATE_DOMAIN and QDRANT_PORT separately
+    let qdrantUrl = env.QDRANT_URL
+
+    if (!qdrantUrl && env.QDRANT_PRIVATE_DOMAIN) {
+      // Railway environment: construct URL from parts
+      const host = env.QDRANT_PRIVATE_DOMAIN
+      const port = env.QDRANT_PORT || 6333
+      qdrantUrl = `http://${host}:${port}`
+      console.log('[QdrantService] Auto-constructed Qdrant URL from Railway variables:', qdrantUrl)
+    }
+
+    if (!qdrantUrl) {
+      // Fallback to localhost for local development
+      qdrantUrl = 'http://localhost:6333'
+    }
+
     // Initialize Qdrant client
     this.client = new QdrantClient({
-      url: env.QDRANT_URL || 'http://localhost:6333',
+      url: qdrantUrl,
       apiKey: env.QDRANT_API_KEY || '',
     });
 
     console.log('[QdrantService] Initialized', {
-      url: env.QDRANT_URL,
+      url: qdrantUrl,
       vectorSize: this.vectorSize,
       distance: this.distance,
     });
