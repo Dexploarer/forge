@@ -1,6 +1,7 @@
 import { usePrivy } from '@privy-io/react-auth'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
+import AdminPage from './pages/AdminPage'
 
 function App() {
   const { ready, authenticated } = usePrivy()
@@ -26,8 +27,6 @@ function App() {
   }
 
   if (path === '/admin') {
-    // Lazy load admin page
-    const AdminPage = require('./pages/AdminPage').default
     return <AdminPage />
   }
 
