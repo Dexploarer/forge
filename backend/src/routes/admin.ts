@@ -25,7 +25,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // Middleware to check admin access (wallet whitelist)
+  // Middleware to check admin access
   const requireAdmin = async (request: any) => {
     if (!request.user) {
       fastify.log.warn('Admin access denied: No authenticated user')
@@ -34,16 +34,14 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
     if (!request.user.isAdmin) {
       fastify.log.warn({
-        privyUserId: request.user.privyUserId,
-        wallet: request.user.walletAddress,
+        userId: request.user.id,
         isAdmin: request.user.isAdmin
-      }, 'Admin access denied: Not in admin whitelist')
+      }, 'Admin access denied: Not an admin')
       throw new ForbiddenError('Admin access required')
     }
 
     fastify.log.info({
-      privyUserId: request.user.privyUserId,
-      wallet: request.user.walletAddress
+      userId: request.user.id
     }, 'Admin access granted')
   }
 

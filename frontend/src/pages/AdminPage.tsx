@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { usePrivy } from '@privy-io/react-auth'
 import { StatsCards } from '../components/admin/StatsCards'
 import { UserTable } from '../components/admin/UserTable'
 import { ActivityFeed } from '../components/admin/ActivityFeed'
-import { WhitelistManager } from '../components/admin/WhitelistManager'
 
-type Tab = 'overview' | 'users' | 'activity' | 'whitelist'
+type Tab = 'overview' | 'users' | 'activity'
 
 interface TabConfig {
   id: Tab
@@ -14,17 +12,12 @@ interface TabConfig {
 }
 
 export default function AdminPage() {
-  const { ready, authenticated, user, logout } = usePrivy()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
-  // Redirect to login if not authenticated
-  if (ready && !authenticated) {
+  const handleLogout = () => {
+    localStorage.removeItem('authenticated')
     window.location.href = '/'
-    return null
   }
-
-  // TODO: Check if user is admin
-  // For now, we'll assume they are if they're authenticated
 
   const tabs: TabConfig[] = [
     {
@@ -53,15 +46,6 @@ export default function AdminPage() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       )
-    },
-    {
-      id: 'whitelist',
-      label: 'Whitelist',
-      icon: (
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-        </svg>
-      )
     }
   ]
 
@@ -75,11 +59,9 @@ export default function AdminPage() {
             <p className="text-sm text-gray-400 mt-1">Manage users, activity, and platform settings</p>
           </div>
           <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-400">
-              {user?.email?.address || user?.wallet?.address || 'Admin'}
-            </span>
+            <span className="text-sm text-gray-400">Admin</span>
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition duration-200 text-sm font-medium border border-slate-600"
             >
               Sign Out
@@ -133,20 +115,6 @@ export default function AdminPage() {
                     </svg>
                   </button>
                   <button
-                    onClick={() => setActiveTab('whitelist')}
-                    className="w-full text-left px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-between text-white"
-                  >
-                    <span className="flex items-center gap-2">
-                      <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                      </svg>
-                      Manage Whitelist
-                    </span>
-                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-                  <button
                     onClick={() => setActiveTab('activity')}
                     className="w-full text-left px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors flex items-center justify-between text-white"
                   >
@@ -169,8 +137,6 @@ export default function AdminPage() {
         {activeTab === 'users' && <UserTable />}
 
         {activeTab === 'activity' && <ActivityFeed />}
-
-        {activeTab === 'whitelist' && <WhitelistManager />}
       </main>
     </div>
   )
