@@ -126,9 +126,9 @@ export default function LorePage() {
         },
         body: JSON.stringify({
           prompt: aiPrompt,
-          projectId: 'default-project-id', // TODO: Get from context/props
+          // projectId omitted - backend handles null gracefully
           category: newLore.category,
-          useContext: true,
+          useContext: false, // Set to false since no projectId
           contextLimit: 5,
         }),
       })

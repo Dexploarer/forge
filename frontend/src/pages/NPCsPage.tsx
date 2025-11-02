@@ -121,8 +121,8 @@ export default function NPCsPage() {
         },
         body: JSON.stringify({
           prompt: aiPrompt,
-          projectId: 'default-project-id', // TODO: Get from context/props
-          useContext: true,
+          // projectId omitted - backend handles null gracefully
+          useContext: false, // Set to false since no projectId
           contextLimit: 5,
         }),
       })

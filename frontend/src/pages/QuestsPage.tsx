@@ -130,10 +130,10 @@ export default function QuestsPage() {
         },
         body: JSON.stringify({
           prompt: aiPrompt,
-          projectId: 'default-project-id', // TODO: Get from context/props
+          // projectId omitted - backend handles null gracefully
           questType: 'side',
           difficulty: 'medium',
-          useContext: true,
+          useContext: false, // Set to false since no projectId
           contextLimit: 5,
         }),
       })
