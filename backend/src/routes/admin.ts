@@ -418,6 +418,133 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return { activity }
   })
 
+  // Sync MinIO assets to database
+  fastify.post('/sync-minio-assets', {
+    preHandler: [fastify.authenticate, requireAdmin],
+    schema: {
+      description: 'Sync assets from MinIO bucket to database (admin only)',
+      summary: 'Sync MinIO to DB',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: z.object({
+          success: z.boolean(),
+          message: z.string(),
+          created: z.number(),
+          skipped: z.number(),
+          total: z.number(),
+        })
+      }
+    }
+  }, async (request) => {
+    try {
+      fastify.log.info('🔄 Admin triggered MinIO to DB sync')
+
+      const { minioClient } = fastify as any
+      const MINIO_BUCKET = process.env.MINIO_BUCKET || 'forge-assets'
+      const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_ENDPOINT || 'https://bucket-staging-4c7a.up.railway.app'
+
+      const stream = minioClient.listObjectsV2(MINIO_BUCKET, '', true)
+      const minioFiles: any[] = []
+
+      await new Promise((resolve, reject) => {
+        stream.on('data', (obj: any) => minioFiles.push(obj))
+        stream.on('end', resolve)
+        stream.on('error', reject)
+      })
+
+      fastify.log.info(`Found ${minioFiles.length} files in MinIO bucket`)
+
+      let created = 0
+      let skipped = 0
+
+      for (const file of minioFiles) {
+        const key = file.name
+
+        // Check if asset with this MinIO key already exists
+        const existing = await fastify.db.query.assets.findFirst({
+          where: sql`${assets.metadata}->>'minioKey' = ${key}`,
+          columns: { id: true }
+        })
+
+        if (existing) {
+          skipped++
+          continue
+        }
+
+        // Determine type from extension (skip if not a known type)
+        const ext = key.split('.').pop()?.toLowerCase()
+        let type: 'model' | 'texture' | 'audio' | null = null
+        if (['glb', 'gltf', 'obj', 'fbx'].includes(ext || '')) type = 'model'
+        else if (['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext || '')) type = 'texture'
+        else if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext || '')) type = 'audio'
+
+        if (!type) {
+          fastify.log.warn(`Skipping unsupported file type: ${key}`)
+          skipped++
+          continue
+        }
+
+        const name = key.split('/').pop() || key
+        const fileUrl = `${MINIO_PUBLIC_URL}/${key}`
+
+        const mimeTypes: Record<string, string> = {
+          glb: 'model/gltf-binary',
+          gltf: 'model/gltf+json',
+          png: 'image/png',
+          jpg: 'image/jpeg',
+          jpeg: 'image/jpeg',
+          webp: 'image/webp',
+          mp3: 'audio/mpeg',
+          wav: 'audio/wav',
+          ogg: 'audio/ogg',
+        }
+
+        await fastify.db.insert(assets).values({
+          name: name.replace(/\.[^/.]+$/, ''),
+          description: `Synced from MinIO: ${key}`,
+          type,
+          status: 'published',
+          visibility: 'public',
+          fileUrl,
+          thumbnailUrl: type === 'texture' ? fileUrl : null,
+          fileSize: file.size,
+          mimeType: mimeTypes[ext || ''] || 'application/octet-stream',
+          metadata: {
+            minioKey: key,
+            minioBucket: MINIO_BUCKET,
+            storageMode: 'minio',
+            syncedAt: new Date().toISOString(),
+          },
+          ownerId: request.user!.id,
+        })
+
+        created++
+        fastify.log.info(`Created asset: ${name}`)
+      }
+
+      const message = `Synced ${created} new assets, skipped ${skipped} existing`
+      fastify.log.info(`✅ ${message}`)
+
+      return {
+        success: true,
+        message,
+        created,
+        skipped,
+        total: minioFiles.length,
+      }
+    } catch (error: any) {
+      fastify.log.error('Failed to sync MinIO assets:', error)
+      return {
+        success: false,
+        message: error.message || 'Failed to sync MinIO assets',
+        created: 0,
+        skipped: 0,
+        total: 0,
+      }
+    }
+  })
+
   // One-time Qdrant setup endpoint
   fastify.post('/setup-qdrant', {
     preHandler: [fastify.authenticate, requireAdmin],
