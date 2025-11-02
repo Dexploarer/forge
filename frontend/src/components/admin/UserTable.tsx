@@ -90,7 +90,7 @@ export function UserTable() {
     }
   }
 
-  const formatDate = (dateString: string | undefined) => {
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'Never'
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',

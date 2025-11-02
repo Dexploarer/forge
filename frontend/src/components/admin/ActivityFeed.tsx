@@ -59,7 +59,7 @@ export function ActivityFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const getEventIcon = (type: ActivityEvent['type'], success?: boolean) => {
+  const getEventIcon = (type: ActivityEvent['type']) => {
     if (type === 'user_created') {
       return (
         <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,7 +88,7 @@ export function ActivityFeed() {
     )
   }
 
-  const getEventBadge = (type: ActivityEvent['type'], success?: boolean) => {
+  const getEventBadge = (type: ActivityEvent['type']) => {
     let bgColor = 'bg-gray-500/20'
     let textColor = 'text-gray-400'
 
@@ -180,13 +180,13 @@ export function ActivityFeed() {
         ) : (
           <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
             {events.map((event) => {
-              const badge = getEventBadge(event.type, event.success)
+              const badge = getEventBadge(event.type)
               return (
                 <div
                   key={event.id}
                   className="flex items-start gap-3 p-3 rounded-lg bg-slate-900/50 hover:bg-slate-700/30 transition-colors"
                 >
-                  <div className="mt-1">{getEventIcon(event.type, event.success)}</div>
+                  <div className="mt-1">{getEventIcon(event.type)}</div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
