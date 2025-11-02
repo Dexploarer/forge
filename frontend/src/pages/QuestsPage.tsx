@@ -23,19 +23,34 @@ import { useApiFetch } from '../utils/api'
 
 interface Quest {
   id: string
-  title: string
+  name: string  // Backend uses 'name', not 'title'
   description: string
-  objectives: string[]
-  rewards: string
-  status: 'active' | 'completed' | 'draft'
-  avatarUrl?: string | null // Quest giver portrait
-  questGiver?: string // NPC name
-  participants?: string[] // NPC names involved
-  locations?: string[] // Where quest takes place
-  relatedLore?: string[] // Lore entry IDs
-  difficulty?: 'easy' | 'medium' | 'hard' | 'epic'
-  isFeatured?: boolean
+  questType?: string
+  difficulty?: 'easy' | 'medium' | 'hard' | 'expert'
+  minLevel?: number
+  maxLevel?: number | null
+  status: 'draft' | 'active' | 'archived'
+  repeatable?: boolean
+  objectives?: any[]  // Array of objective objects
+  rewards?: any
+  requirements?: any
+  startDialog?: string | null
+  completeDialog?: string | null
+  failDialog?: string | null
+  questGiverNpcId?: string | null
+  location?: string | null
+  relatedNpcs?: string[]
+  estimatedDuration?: number | null
+  cooldownHours?: number
   tags?: string[]
+  metadata?: any
+  // Display fields (derived)
+  avatarUrl?: string | null
+  questGiver?: string
+  participants?: string[]
+  locations?: string[]
+  relatedLore?: string[]
+  isFeatured?: boolean
   createdAt: string
   updatedAt?: string
 }
@@ -69,57 +84,159 @@ export default function QuestsPage() {
   ]
 
   useEffect(() => {
+    console.log('[QuestsPage] Component mounted, fetching quests')
     fetchQuests()
   }, [])
 
   const fetchQuests = async () => {
+    console.log('[QuestsPage] fetchQuests: Starting API call to /api/quests')
     try {
       setIsLoading(true)
       const response = await apiFetch('/api/quests')
+      console.log('[QuestsPage] fetchQuests: Received response', {
+        status: response.status,
+        ok: response.ok,
+      })
+
       if (response.ok) {
         const data = await response.json()
-        setQuests(data.quests || [])
+        console.log('[QuestsPage] fetchQuests: Response data structure', {
+          hasQuests: !!data.quests,
+          questsCount: data.quests?.length || 0,
+          hasPagination: !!data.pagination,
+          rawKeys: Object.keys(data),
+        })
+
+        const fetchedQuests = data.quests || []
+        setQuests(fetchedQuests)
+        console.log('[QuestsPage] fetchQuests: Set quests state with', fetchedQuests.length, 'quests')
+      } else {
+        const errorText = await response.text()
+        console.error('[QuestsPage] fetchQuests: API error', {
+          status: response.status,
+          error: errorText,
+        })
       }
     } catch (error) {
-      console.error('Failed to fetch quests:', error)
+      console.error('[QuestsPage] fetchQuests: Exception caught', error)
     } finally {
       setIsLoading(false)
+      console.log('[QuestsPage] fetchQuests: Completed')
     }
   }
 
   const handleCreateQuest = async () => {
-    if (!newQuest.title.trim() || !newQuest.description.trim()) return
+    if (!newQuest.title.trim() || !newQuest.description.trim()) {
+      console.warn('[QuestsPage] handleCreateQuest: Validation failed - missing title or description')
+      return
+    }
 
     setIsCreating(true)
     try {
+      // Convert objectives string to array of objective objects
+      const objectivesArray = newQuest.objectives
+        .split('\n')
+        .map((o, idx) => o.trim())
+        .filter(Boolean)
+        .map((desc, idx) => ({
+          id: `obj${idx + 1}`,
+          type: 'custom',
+          description: desc,
+        }))
+
+      // Build request payload
+      const payload: any = {
+        name: newQuest.title,  // Backend expects 'name'
+        description: newQuest.description,
+        questType: 'side',
+        difficulty: 'medium',
+        status: 'draft',
+      }
+
+      // Only include objectives if user provided any
+      if (objectivesArray.length > 0) {
+        payload.objectives = objectivesArray
+      } else {
+        // Provide a default objective if none specified
+        payload.objectives = [{
+          id: 'obj1',
+          type: 'main',
+          description: 'Complete the quest',
+        }]
+      }
+
+      // Only include rewards if user provided any
+      if (newQuest.rewards.trim()) {
+        payload.rewards = {
+          gold: 100,
+          experience: 250,
+        }
+      }
+
+      console.log('[QuestsPage] handleCreateQuest: Starting quest creation', {
+        name: payload.name.substring(0, 50) + '...',
+        descriptionLength: payload.description.length,
+        objectivesCount: payload.objectives.length,
+        hasRewards: !!payload.rewards,
+      })
+
       const response = await apiFetch('/api/quests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title: newQuest.title,
-          description: newQuest.description,
-          objectives: newQuest.objectives.split('\n').map(o => o.trim()).filter(Boolean),
-          rewards: newQuest.rewards,
-          status: 'draft',
-        }),
+        body: JSON.stringify(payload),
+      })
+
+      console.log('[QuestsPage] handleCreateQuest: Received response', {
+        status: response.status,
+        ok: response.ok,
       })
 
       if (response.ok) {
+        const data = await response.json()
+        console.log('[QuestsPage] handleCreateQuest: Quest created successfully', {
+          questId: data.quest?.id,
+        })
+
         await fetchQuests()
         setShowCreateModal(false)
         setNewQuest({ title: '', description: '', objectives: '', rewards: '' })
+        console.log('[QuestsPage] handleCreateQuest: Modal closed, form reset')
+      } else {
+        const errorText = await response.text()
+        console.error('[QuestsPage] handleCreateQuest: API error', {
+          status: response.status,
+          error: errorText,
+        })
+        alert(`Failed to create quest: ${errorText}`)
       }
     } catch (error) {
-      console.error('Failed to create quest:', error)
+      console.error('[QuestsPage] handleCreateQuest: Exception caught', error)
+      alert('Failed to create quest. Please try again.')
     } finally {
       setIsCreating(false)
+      console.log('[QuestsPage] handleCreateQuest: Completed')
     }
   }
 
   const handleAiGenerate = async () => {
-    if (!aiPrompt.trim()) return
+    if (!aiPrompt.trim()) {
+      console.warn('[QuestsPage] handleAiGenerate: Empty prompt')
+      return
+    }
+
+    const payload = {
+      prompt: aiPrompt,
+      questType: 'side',
+      difficulty: 'medium',
+      useContext: false,
+      contextLimit: 5,
+    }
+
+    console.log('[QuestsPage] handleAiGenerate: Starting AI generation', {
+      promptLength: aiPrompt.length,
+    })
 
     setIsGenerating(true)
     try {
@@ -128,19 +245,24 @@ export default function QuestsPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prompt: aiPrompt,
-          // projectId omitted - backend handles null gracefully
-          questType: 'side',
-          difficulty: 'medium',
-          useContext: false, // Set to false since no projectId
-          contextLimit: 5,
-        }),
+        body: JSON.stringify(payload),
+      })
+
+      console.log('[QuestsPage] handleAiGenerate: Received response', {
+        status: response.status,
+        ok: response.ok,
       })
 
       if (response.ok) {
         const data = await response.json()
         const quest = data.quest
+
+        console.log('[QuestsPage] handleAiGenerate: AI generated quest', {
+          hasName: !!quest.name,
+          hasDescription: !!quest.description,
+          objectivesCount: quest.objectives?.length || 0,
+          hasRewards: !!quest.rewards,
+        })
 
         // Format objectives as newline-separated string
         const objectivesText = quest.objectives
@@ -167,16 +289,21 @@ export default function QuestsPage() {
 
         setShowAiGenerate(false)
         setAiPrompt('')
+        console.log('[QuestsPage] handleAiGenerate: Form populated with AI-generated data')
       } else {
         const error = await response.text()
-        console.error('AI generation failed:', error)
+        console.error('[QuestsPage] handleAiGenerate: API error', {
+          status: response.status,
+          error,
+        })
         alert('AI generation failed. Please try again.')
       }
     } catch (error) {
-      console.error('Failed to generate quest:', error)
+      console.error('[QuestsPage] handleAiGenerate: Exception caught', error)
       alert('Failed to generate quest. Please try again.')
     } finally {
       setIsGenerating(false)
+      console.log('[QuestsPage] handleAiGenerate: Completed')
     }
   }
 
@@ -184,7 +311,7 @@ export default function QuestsPage() {
     const matchesStatus = selectedStatus === 'all' || quest.status === selectedStatus
     const matchesSearch =
       !searchQuery ||
-      quest.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      quest.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       quest.description.toLowerCase().includes(searchQuery.toLowerCase())
     return matchesStatus && matchesSearch
   })
@@ -374,7 +501,7 @@ export default function QuestsPage() {
               <CharacterCard
                 key={quest.id}
                 id={quest.id}
-                name={quest.title}
+                name={quest.name}
                 description={quest.description}
                 avatarUrl={quest.avatarUrl}
                 handle={quest.questGiver ? `@${quest.questGiver}` : undefined}
@@ -530,7 +657,7 @@ export default function QuestsPage() {
           }}
           entity={{
             id: selectedQuest.id,
-            name: selectedQuest.title,
+            name: selectedQuest.name,
             type: 'quest',
             avatarUrl: selectedQuest.avatarUrl,
             description: selectedQuest.description,
@@ -563,20 +690,22 @@ export default function QuestsPage() {
                 )}
 
                 {/* Objectives */}
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                    <CheckCircle size={18} />
-                    Objectives
-                  </h3>
-                  <ul className="space-y-2">
-                    {selectedQuest.objectives.map((objective, index) => (
-                      <li key={index} className="flex items-start gap-3 text-gray-300">
-                        <span className="text-blue-400 font-semibold mt-0.5">{index + 1}.</span>
-                        <span>{objective}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                {selectedQuest.objectives && selectedQuest.objectives.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <CheckCircle size={18} />
+                      Objectives
+                    </h3>
+                    <ul className="space-y-2">
+                      {selectedQuest.objectives.map((objective: any, index: number) => (
+                        <li key={index} className="flex items-start gap-3 text-gray-300">
+                          <span className="text-blue-400 font-semibold mt-0.5">{index + 1}.</span>
+                          <span>{typeof objective === 'string' ? objective : objective.description || objective.type}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Rewards */}
                 {selectedQuest.rewards && (
@@ -585,7 +714,23 @@ export default function QuestsPage() {
                       <Award size={18} />
                       Rewards
                     </h3>
-                    <p className="text-gray-300">{selectedQuest.rewards}</p>
+                    <div className="text-gray-300">
+                      {typeof selectedQuest.rewards === 'string' ? (
+                        <p>{selectedQuest.rewards}</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {selectedQuest.rewards.experience && (
+                            <p>• {selectedQuest.rewards.experience} XP</p>
+                          )}
+                          {selectedQuest.rewards.gold && (
+                            <p>• {selectedQuest.rewards.gold} Gold</p>
+                          )}
+                          {selectedQuest.rewards.items?.map((item: any, idx: number) => (
+                            <p key={idx}>• {item.name} x{item.quantity}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

@@ -23,7 +23,18 @@ export class EmbeddingsService {
    * Generate embedding for text using AI Gateway
    */
   async embedText(text: string): Promise<number[]> {
+    console.log('[EmbeddingsService] embedText: Generating embedding', {
+      textLength: text.length,
+      model: this.model,
+    })
+
     const embedding = await aiSDKService.generateEmbedding(text, { model: this.model })
+
+    console.log('[EmbeddingsService] embedText: Embedding generated', {
+      dimensions: embedding.length,
+      firstValues: embedding.slice(0, 3).map(v => v.toFixed(4)),
+    })
+
     return embedding
   }
 
@@ -65,7 +76,20 @@ export class EmbeddingsService {
     text: string
     metadata?: Record<string, any>
   }): Promise<void> {
+    console.log('[EmbeddingsService] storeEmbedding: Starting', {
+      contentType: params.contentType,
+      contentId: params.contentId,
+      textLength: params.text.length,
+      hasMetadata: !!params.metadata,
+    })
+
     const embedding = await this.embedText(params.text)
+
+    console.log('[EmbeddingsService] storeEmbedding: Upserting to Qdrant', {
+      contentType: params.contentType,
+      contentId: params.contentId,
+      embeddingDimensions: embedding.length,
+    })
 
     await qdrantService.upsert({
       contentType: params.contentType,
@@ -75,6 +99,11 @@ export class EmbeddingsService {
       embeddingModel: EMBEDDING_MODELS.TEXT_EMBEDDING_3_SMALL,
       embeddingDimensions: this.embeddingDimensions,
       metadata: params.metadata,
+    })
+
+    console.log('[EmbeddingsService] storeEmbedding: Successfully stored', {
+      contentType: params.contentType,
+      contentId: params.contentId,
     })
   }
 
@@ -154,12 +183,23 @@ export class EmbeddingsService {
     threshold: number = 0.7,
     limit: number = 10
   ): Promise<SimilarContent[]> {
+    console.log('[EmbeddingsService] findSimilarLore: Searching Qdrant', {
+      embeddingDimensions: embedding.length,
+      threshold,
+      limit,
+    })
+
     const results = await qdrantService.search({
       contentType: CONTENT_TYPES.LORE,
       queryVector: embedding,
       limit,
       threshold,
       filter: undefined,
+    })
+
+    console.log('[EmbeddingsService] findSimilarLore: Found results', {
+      resultsCount: results.length,
+      topScores: results.slice(0, 3).map(r => r.score.toFixed(3)),
     })
 
     return results.map(result => ({

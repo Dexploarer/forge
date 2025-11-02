@@ -66,26 +66,66 @@ export default function LorePage() {
   ]
 
   useEffect(() => {
+    console.log('[LorePage] Component mounted, fetching lore entries')
     fetchLore()
   }, [])
 
   const fetchLore = async () => {
+    console.log('[LorePage] fetchLore: Starting API call to /api/lore')
     try {
       setIsLoading(true)
       const response = await apiFetch('/api/lore')
+      console.log('[LorePage] fetchLore: Received response', {
+        status: response.status,
+        ok: response.ok,
+      })
+
       if (response.ok) {
         const data = await response.json()
-        setLore(data.lore || [])
+        console.log('[LorePage] fetchLore: Response data structure', {
+          hasLoreEntries: !!data.loreEntries,
+          loreEntriesCount: data.loreEntries?.length || 0,
+          hasPagination: !!data.pagination,
+          rawKeys: Object.keys(data),
+        })
+
+        const entries = data.loreEntries || []
+        setLore(entries)
+        console.log('[LorePage] fetchLore: Set lore state with', entries.length, 'entries')
+      } else {
+        const errorText = await response.text()
+        console.error('[LorePage] fetchLore: API error', {
+          status: response.status,
+          error: errorText,
+        })
       }
     } catch (error) {
-      console.error('Failed to fetch lore:', error)
+      console.error('[LorePage] fetchLore: Exception caught', error)
     } finally {
       setIsLoading(false)
+      console.log('[LorePage] fetchLore: Completed')
     }
   }
 
   const handleCreateLore = async () => {
-    if (!newLore.title.trim() || !newLore.content.trim()) return
+    if (!newLore.title.trim() || !newLore.content.trim()) {
+      console.warn('[LorePage] handleCreateLore: Validation failed - missing title or content')
+      return
+    }
+
+    const payload = {
+      title: newLore.title,
+      content: newLore.content,
+      category: newLore.category,
+      tags: newLore.tags.split(',').map(t => t.trim()).filter(Boolean),
+    }
+
+    console.log('[LorePage] handleCreateLore: Starting lore creation', {
+      title: payload.title.substring(0, 50) + '...',
+      contentLength: payload.content.length,
+      category: payload.category,
+      tagsCount: payload.tags.length,
+    })
 
     setIsCreating(true)
     try {
@@ -94,28 +134,58 @@ export default function LorePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title: newLore.title,
-          content: newLore.content,
-          category: newLore.category,
-          tags: newLore.tags.split(',').map(t => t.trim()).filter(Boolean),
-        }),
+        body: JSON.stringify(payload),
+      })
+
+      console.log('[LorePage] handleCreateLore: Received response', {
+        status: response.status,
+        ok: response.ok,
       })
 
       if (response.ok) {
+        const data = await response.json()
+        console.log('[LorePage] handleCreateLore: Lore created successfully', {
+          loreId: data.lore?.id,
+        })
+
         await fetchLore()
         setShowCreateModal(false)
         setNewLore({ title: '', content: '', category: 'history', tags: '' })
+        console.log('[LorePage] handleCreateLore: Modal closed, form reset')
+      } else {
+        const errorText = await response.text()
+        console.error('[LorePage] handleCreateLore: API error', {
+          status: response.status,
+          error: errorText,
+        })
+        alert(`Failed to create lore: ${errorText}`)
       }
     } catch (error) {
-      console.error('Failed to create lore:', error)
+      console.error('[LorePage] handleCreateLore: Exception caught', error)
+      alert('Failed to create lore. Please try again.')
     } finally {
       setIsCreating(false)
+      console.log('[LorePage] handleCreateLore: Completed')
     }
   }
 
   const handleAiGenerate = async () => {
-    if (!aiPrompt.trim()) return
+    if (!aiPrompt.trim()) {
+      console.warn('[LorePage] handleAiGenerate: Empty prompt')
+      return
+    }
+
+    const payload = {
+      prompt: aiPrompt,
+      category: newLore.category,
+      useContext: false,
+      contextLimit: 5,
+    }
+
+    console.log('[LorePage] handleAiGenerate: Starting AI generation', {
+      promptLength: aiPrompt.length,
+      category: newLore.category,
+    })
 
     setIsGenerating(true)
     try {
@@ -124,18 +194,25 @@ export default function LorePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prompt: aiPrompt,
-          // projectId omitted - backend handles null gracefully
-          category: newLore.category,
-          useContext: false, // Set to false since no projectId
-          contextLimit: 5,
-        }),
+        body: JSON.stringify(payload),
+      })
+
+      console.log('[LorePage] handleAiGenerate: Received response', {
+        status: response.status,
+        ok: response.ok,
       })
 
       if (response.ok) {
         const data = await response.json()
         const loreEntry = data.lore
+
+        console.log('[LorePage] handleAiGenerate: AI generated lore', {
+          hasTitle: !!loreEntry.title,
+          hasContent: !!loreEntry.content,
+          contentLength: loreEntry.content?.length || 0,
+          category: loreEntry.category,
+          tagsCount: loreEntry.tags?.length || 0,
+        })
 
         // Populate form with generated data
         setNewLore({
@@ -147,16 +224,21 @@ export default function LorePage() {
 
         setShowAiGenerate(false)
         setAiPrompt('')
+        console.log('[LorePage] handleAiGenerate: Form populated with AI-generated data')
       } else {
         const error = await response.text()
-        console.error('AI generation failed:', error)
+        console.error('[LorePage] handleAiGenerate: API error', {
+          status: response.status,
+          error,
+        })
         alert('AI generation failed. Please try again.')
       }
     } catch (error) {
-      console.error('Failed to generate lore:', error)
+      console.error('[LorePage] handleAiGenerate: Exception caught', error)
       alert('Failed to generate lore. Please try again.')
     } finally {
       setIsGenerating(false)
+      console.log('[LorePage] handleAiGenerate: Completed')
     }
   }
 

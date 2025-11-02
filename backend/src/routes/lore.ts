@@ -64,6 +64,18 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       search?: string
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      page,
+      limit,
+      projectId,
+      category,
+      era,
+      region,
+      status,
+      search,
+    }, '[Lore API] GET /api/lore - Fetching lore entries')
+
     // Verify user has access to the project if projectId is provided
     if (projectId) {
       await verifyProjectMembership(fastify, projectId, request)
@@ -131,6 +143,13 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
 
     const total = Number(countResult[0]?.count ?? 0)
 
+    fastify.log.info({
+      entriesCount: entries.length,
+      total,
+      page,
+      limit,
+    }, '[Lore API] GET /api/lore - Returning lore entries')
+
     return {
       loreEntries: entries.map(e => serializeAllTimestamps(e)),
       pagination: { page, limit, total }
@@ -192,6 +211,15 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       status?: string
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      title: data.title.substring(0, 50),
+      contentLength: data.content.length,
+      category: data.category,
+      tagsCount: data.tags?.length || 0,
+      hasProjectId: !!data.projectId,
+    }, '[Lore API] POST /api/lore - Creating lore entry')
+
     // Get or create default project if projectId not provided
     const projectId = data.projectId || await getOrCreateDefaultProject(fastify, request.user!.id)
 
@@ -221,6 +249,11 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       throw new Error('Failed to create lore entry')
     }
 
+    fastify.log.info({
+      loreEntryId: entry.id,
+      projectId: entry.projectId,
+    }, '[Lore API] POST /api/lore - Lore entry created, generating embedding')
+
     // Auto-generate and store embedding for semantic search
     try {
       const embeddingText = [
@@ -249,9 +282,13 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
             projectId: entry.projectId,
           },
         })
+        fastify.log.info({
+          loreEntryId: entry.id,
+          embeddingTextLength: embeddingText.length,
+        }, '[Lore API] POST /api/lore - Embedding stored successfully')
       }
     } catch (error) {
-      fastify.log.error({ error, loreEntryId: entry.id }, 'Failed to store lore embedding')
+      fastify.log.error({ error, loreEntryId: entry.id }, '[Lore API] POST /api/lore - Failed to store lore embedding')
       // Don't fail the request if embedding fails
     }
 
@@ -612,6 +649,17 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       contextLimit: number
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      promptLength: prompt.length,
+      category,
+      era,
+      region,
+      useContext,
+      contextLimit,
+      hasProjectId: !!providedProjectId,
+    }, '[Lore API] POST /api/lore/generate - Starting AI lore generation')
+
     // Use provided projectId or create a temporary context-less generation
     const projectId = providedProjectId || null
 
@@ -626,6 +674,11 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       // Get context if requested and projectId is available
       let contextText = ''
       if (useContext && projectId) {
+        fastify.log.info({
+          projectId,
+          contextLimit,
+        }, '[Lore API] POST /api/lore/generate - Fetching similar lore for context')
+
         const similarContent = await embeddingsService.findSimilarLore(
           fastify.db,
           await aiService.generateEmbedding(prompt),
@@ -639,6 +692,11 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
           similarContent.forEach((item) => {
             contextText += `\n${item.content.substring(0, 300)}...\n`
           })
+          fastify.log.info({
+            similarContentCount: similarContent.length,
+          }, '[Lore API] POST /api/lore/generate - Found similar content for context')
+        } else {
+          fastify.log.info('[Lore API] POST /api/lore/generate - No similar content found for context')
         }
       }
 
@@ -659,6 +717,10 @@ Return a JSON object with the following structure:
 
 Make the lore engaging, internally consistent${useContext ? ', and compatible with the existing lore provided' : ''}.${contextText}`
 
+      fastify.log.info({
+        systemPromptLength: systemPrompt.length,
+      }, '[Lore API] POST /api/lore/generate - Calling Claude API')
+
       // Generate lore with Claude
       const responseText = await aiService.generateWithClaude(
         prompt,
@@ -670,17 +732,32 @@ Make the lore engaging, internally consistent${useContext ? ', and compatible wi
         }
       )
 
+      fastify.log.info({
+        responseLength: responseText.length,
+      }, '[Lore API] POST /api/lore/generate - Received Claude response')
+
       // Parse JSON response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
+        fastify.log.error({
+          responseText: responseText.substring(0, 500),
+        }, '[Lore API] POST /api/lore/generate - Failed to parse JSON from response')
         throw new Error('Failed to parse AI response')
       }
 
       const generatedLore = JSON.parse(jsonMatch[0])
 
+      fastify.log.info({
+        hasTitle: !!generatedLore.title,
+        hasContent: !!generatedLore.content,
+        contentLength: generatedLore.content?.length || 0,
+        category: generatedLore.category,
+        tagsCount: generatedLore.tags?.length || 0,
+      }, '[Lore API] POST /api/lore/generate - Successfully generated lore')
+
       reply.code(201).send({ lore: generatedLore })
     } catch (error) {
-      fastify.log.error({ error, prompt }, 'Lore generation failed')
+      fastify.log.error({ error, prompt: prompt.substring(0, 100) }, '[Lore API] POST /api/lore/generate - Lore generation failed')
       throw new Error(`Lore generation failed: ${(error as Error).message}`)
     }
   })
