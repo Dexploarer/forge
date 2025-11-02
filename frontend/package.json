@@ -12,6 +12,7 @@
   "dependencies": {
     "@privy-io/react-auth": "^3.5.0",
     "@privy-io/wagmi": "^2.0.2",
+    "lucide-react": "^0.552.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "viem": "^2",
