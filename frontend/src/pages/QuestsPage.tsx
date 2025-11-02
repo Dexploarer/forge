@@ -414,6 +414,8 @@ export default function QuestsPage() {
           prompt,
           size: '1024x1024',
           quality: 'standard',
+          style: 'vivid',
+          model: 'openai/gpt-5-nano', // Cost-effective AI Gateway model
         }),
       })
 

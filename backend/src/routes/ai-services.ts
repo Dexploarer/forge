@@ -1,8 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
-import { experimental_generateImage as generateImage } from 'ai'
-import { openai } from '@ai-sdk/openai'
+import { experimental_generateImage as generateImage, gateway } from 'ai'
 import { aiServiceCalls } from '../database/schema'
 import { ForbiddenError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -366,13 +365,20 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/generate-image', {
     preHandler: [fastify.authenticate],
     schema: {
-      description: 'Generate image using DALL-E via AI Gateway',
+      description: 'Generate image using AI Gateway (GPT-5 Nano or Gemini)',
       tags: ['ai-services'],
       body: z.object({
         prompt: z.string().min(1),
         size: z.enum(['256x256', '512x512', '1024x1024', '1024x1792', '1792x1024']).default('1024x1024'),
         quality: z.enum(['standard', 'hd']).default('standard'),
         style: z.enum(['vivid', 'natural']).default('vivid'),
+        model: z.enum([
+          'openai/gpt-5-nano',
+          'openai/gpt-5',
+          'openai/gpt-5-pro',
+          'google/gemini-2.5-flash-image-preview',
+          'google/gemini-2.5-flash-image',
+        ]).default('openai/gpt-5-nano'),
       }),
       response: {
         200: z.object({
@@ -384,11 +390,12 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
   }, async (request) => {
-    const { prompt, size, quality, style } = request.body as {
+    const { prompt, size, quality, style, model: imageModel } = request.body as {
       prompt: string
       size: '256x256' | '512x512' | '1024x1024' | '1024x1792' | '1792x1024'
       quality: 'standard' | 'hd'
       style: 'vivid' | 'natural'
+      model: string
     }
 
     // Check rate limits
@@ -405,18 +412,23 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Use Vercel AI SDK with AI Gateway if available, otherwise fall back to direct OpenAI
       if (env.AI_GATEWAY_API_KEY || env.VERCEL_ENV) {
-        fastify.log.info('[Image Generation] Using Vercel AI SDK with AI Gateway for DALL-E')
+        fastify.log.info(`[Image Generation] Using Vercel AI Gateway with model: ${imageModel}`)
+        fastify.log.info('[Image Generation] AI_GATEWAY_API_KEY present:', !!env.AI_GATEWAY_API_KEY)
 
-        // Use experimental_generateImage from Vercel AI SDK
-        // This automatically uses AI Gateway when AI_GATEWAY_API_KEY is set
+        // Use experimental_generateImage with gateway provider
+        // The gateway() function ensures routing through Vercel AI Gateway
+        // Available models: openai/gpt-5-nano, openai/gpt-5, google/gemini-2.5-flash-image
         const result = await generateImage({
-          model: openai.image('dall-e-3'),
+          model: gateway(imageModel),
           prompt,
           size,
           providerOptions: {
             openai: {
               style,
               quality,
+            },
+            google: {
+              // Gemini-specific options if needed
             },
           },
         })
@@ -426,7 +438,10 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
         imageUrl = `data:image/png;base64,${base64Image}`
 
         // Get revised prompt from provider metadata if available
-        revisedPrompt = result.providerMetadata?.openai?.revisedPrompt
+        revisedPrompt = result.providerMetadata?.openai?.revisedPrompt ||
+                       result.providerMetadata?.google?.revisedPrompt
+
+        fastify.log.info('[Image Generation] Successfully generated image via AI Gateway')
       } else {
         fastify.log.info('[Image Generation] Using direct OpenAI API (no AI Gateway key)')
 
@@ -444,9 +459,10 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       const cost = calculateOpenAICost(1000, 'dall-e-3', 'output')
 
       // Record usage
-      await recordUsage(fastify.db, request.user!.id, 'openai', {
+      const provider = imageModel.startsWith('google/') ? 'google' : 'openai'
+      await recordUsage(fastify.db, request.user!.id, provider, {
         endpoint: '/images/generations',
-        model: 'dall-e-3',
+        model: imageModel,
         requestData: { prompt, size, quality, style },
         responseData: { imageUrl },
         cost,
@@ -462,9 +478,10 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       }
     } catch (err) {
       // Record failed usage
-      await recordUsage(fastify.db, request.user!.id, 'openai', {
+      const provider = request.body.model?.startsWith('google/') ? 'google' : 'openai'
+      await recordUsage(fastify.db, request.user!.id, provider, {
         endpoint: '/images/generations',
-        model: 'dall-e-3',
+        model: request.body.model || 'openai/gpt-5-nano',
         requestData: { prompt, size, quality, style },
         durationMs: Date.now() - startTime,
         status: 'error',
