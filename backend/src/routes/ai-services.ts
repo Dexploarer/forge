@@ -1,6 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
+import { experimental_generateImage as generateImage } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import { aiServiceCalls } from '../database/schema'
 import { ForbiddenError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -9,6 +11,7 @@ import { calculateOpenAICost, calculateMeshyCost, formatCost } from '../helpers/
 import { openaiService } from '../services/openai.service'
 import { meshyService } from '../services/meshy.service'
 import { embeddingsService } from '../services/embeddings.service'
+import { env } from '../config/env'
 
 const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -363,7 +366,7 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/generate-image', {
     preHandler: [fastify.authenticate],
     schema: {
-      description: 'Generate image using DALL-E',
+      description: 'Generate image using DALL-E via AI Gateway',
       tags: ['ai-services'],
       body: z.object({
         prompt: z.string().min(1),
@@ -397,11 +400,45 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
     const startTime = Date.now()
 
     try {
-      const response = await openaiService.generateImage(prompt, {
-        size,
-        quality,
-        style,
-      })
+      let imageUrl: string
+      let revisedPrompt: string | undefined
+
+      // Use Vercel AI SDK with AI Gateway if available, otherwise fall back to direct OpenAI
+      if (env.AI_GATEWAY_API_KEY || env.VERCEL_ENV) {
+        fastify.log.info('[Image Generation] Using Vercel AI SDK with AI Gateway for DALL-E')
+
+        // Use experimental_generateImage from Vercel AI SDK
+        // This automatically uses AI Gateway when AI_GATEWAY_API_KEY is set
+        const result = await generateImage({
+          model: openai.image('dall-e-3'),
+          prompt,
+          size,
+          providerOptions: {
+            openai: {
+              style,
+              quality,
+            },
+          },
+        })
+
+        // Convert base64 image to data URL
+        const base64Image = result.image.base64
+        imageUrl = `data:image/png;base64,${base64Image}`
+
+        // Get revised prompt from provider metadata if available
+        revisedPrompt = result.providerMetadata?.openai?.revisedPrompt
+      } else {
+        fastify.log.info('[Image Generation] Using direct OpenAI API (no AI Gateway key)')
+
+        const response = await openaiService.generateImage(prompt, {
+          size,
+          quality,
+          style,
+        })
+
+        imageUrl = response.url
+        revisedPrompt = response.revisedPrompt
+      }
 
       // Calculate cost (1 image = 1000 tokens equivalent for cost calculation)
       const cost = calculateOpenAICost(1000, 'dall-e-3', 'output')
@@ -411,15 +448,15 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
         endpoint: '/images/generations',
         model: 'dall-e-3',
         requestData: { prompt, size, quality, style },
-        responseData: { imageUrl: response.url },
+        responseData: { imageUrl },
         cost,
         durationMs: Date.now() - startTime,
         status: 'success',
       })
 
       return {
-        imageUrl: response.url,
-        revisedPrompt: response.revisedPrompt,
+        imageUrl,
+        revisedPrompt,
         cost,
         costFormatted: formatCost(cost),
       }
