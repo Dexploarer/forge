@@ -46,6 +46,7 @@ const envSchema = z.object({
 
   // AI Service API Keys
   OPENAI_API_KEY: z.string().optional(),
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional(),
   MESHY_API_KEY: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
