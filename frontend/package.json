@@ -12,10 +12,13 @@
   "dependencies": {
     "@privy-io/react-auth": "^3.5.0",
     "@privy-io/wagmi": "^2.0.2",
+    "@react-three/drei": "^10.7.6",
+    "@react-three/fiber": "^9.4.0",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.9.5",
+    "three": "^0.181.0",
     "viem": "^2",
     "wagmi": "^2"
   },

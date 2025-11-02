@@ -3,7 +3,7 @@
  * Browse and manage 3D models, textures, audio files, and other game assets
  */
 
-import { Database, Grid, List, Upload, Search } from 'lucide-react'
+import { Database, Grid, List, Upload, Search, Download, ExternalLink } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -11,18 +11,25 @@ import {
   Button,
   Input,
   Select,
+  Badge,
 } from '../components/common'
 import { CharacterCard } from '../components/common/CharacterCard'
 import { DetailModal } from '../components/common/DetailModal'
+import { AssetPreview } from '../components/assets/AssetPreview'
 import { useApiFetch } from '../utils/api'
 
 interface Asset {
   id: string
   name: string
-  type: string
-  status: 'draft' | 'published'
+  description?: string
+  type: 'model' | 'texture' | 'audio' | 'other'
+  status: 'draft' | 'processing' | 'published' | 'failed'
+  visibility: 'private' | 'public'
   thumbnailUrl: string | null
+  optimizedUrl?: string | null
   fileUrl: string | null
+  fileSize?: number | null
+  mimeType?: string | null
   metadata: Record<string, any>
   createdAt: string
   updatedAt: string
@@ -230,38 +237,117 @@ export default function AssetsPage() {
             name: selectedAsset.name,
             type: 'asset',
             avatarUrl: selectedAsset.thumbnailUrl,
-            description: `${selectedAsset.type} asset`,
+            description: selectedAsset.description || `${selectedAsset.type} asset`,
             badges: [
               ...(selectedAsset.isFeatured ? ['featured' as const] : []),
               selectedAsset.status === 'published' ? 'published' as const : 'draft' as const,
             ],
             overview: (
               <div className="space-y-6">
+                {/* Asset Preview */}
+                {selectedAsset.fileUrl && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Preview</h3>
+                    <div className="rounded-lg overflow-hidden bg-slate-900/50 border border-slate-700" style={{ height: '500px' }}>
+                      <AssetPreview
+                        type={selectedAsset.type}
+                        fileUrl={selectedAsset.fileUrl}
+                        name={selectedAsset.name}
+                        mimeType={selectedAsset.mimeType || undefined}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Asset Details */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3">Asset Details</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-400">Type</p>
-                      <p className="text-white font-medium">{selectedAsset.type}</p>
+                      <Badge variant="secondary" size="md" className="mt-1">
+                        {selectedAsset.type.toUpperCase()}
+                      </Badge>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Status</p>
-                      <p className="text-white font-medium capitalize">{selectedAsset.status}</p>
+                      <Badge
+                        variant={selectedAsset.status === 'published' ? 'success' : selectedAsset.status === 'failed' ? 'error' : 'warning'}
+                        size="md"
+                        className="mt-1"
+                      >
+                        {selectedAsset.status.toUpperCase()}
+                      </Badge>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">File Size</p>
                       <p className="text-white font-medium">
-                        {formatFileSize(selectedAsset.metadata?.fileSize)}
+                        {formatFileSize(selectedAsset.fileSize || selectedAsset.metadata?.fileSize)}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-400">Format</p>
                       <p className="text-white font-medium">
-                        {selectedAsset.metadata?.format?.toUpperCase() || 'N/A'}
+                        {selectedAsset.mimeType?.split('/')[1]?.toUpperCase() || selectedAsset.metadata?.format?.toUpperCase() || 'N/A'}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Visibility</p>
+                      <Badge variant={selectedAsset.visibility === 'public' ? 'success' : 'secondary'} size="md" className="mt-1">
+                        {selectedAsset.visibility.toUpperCase()}
+                      </Badge>
+                    </div>
+                    {selectedAsset.metadata?.storageMode && (
+                      <div>
+                        <p className="text-sm text-gray-400">Storage</p>
+                        <Badge variant="primary" size="md" className="mt-1">
+                          {selectedAsset.metadata.storageMode.toUpperCase()}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {/* File Links */}
+                {selectedAsset.fileUrl && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">File Links</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => window.open(selectedAsset.fileUrl!, '_blank')}
+                        >
+                          <ExternalLink size={16} />
+                          Open File
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => {
+                            const a = document.createElement('a')
+                            a.href = selectedAsset.fileUrl!
+                            a.download = selectedAsset.name
+                            a.click()
+                          }}
+                        >
+                          <Download size={16} />
+                          Download
+                        </Button>
+                      </div>
+                      {selectedAsset.metadata?.minioBucket && (
+                        <div className="text-xs text-gray-400">
+                          <span className="font-mono">Bucket: {selectedAsset.metadata.minioBucket}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dimensions for 3D models/images */}
                 {selectedAsset.metadata?.dimensions && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3">Dimensions</h3>
@@ -273,12 +359,16 @@ export default function AssetsPage() {
                     </p>
                   </div>
                 )}
+
+                {/* Duration for audio */}
                 {selectedAsset.metadata?.duration && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3">Duration</h3>
                     <p className="text-gray-300">{selectedAsset.metadata.duration}s</p>
                   </div>
                 )}
+
+                {/* Dates */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3">Dates</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -296,6 +386,7 @@ export default function AssetsPage() {
             ),
             technical: (
               <div className="space-y-6">
+                {/* Usage Statistics */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3">Usage Statistics</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -307,6 +398,8 @@ export default function AssetsPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Related Content */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3">
                     Related Content (Coming Soon)
@@ -315,10 +408,12 @@ export default function AssetsPage() {
                     View NPCs, quests, and locations that use this asset
                   </p>
                 </div>
+
+                {/* Full Metadata */}
                 {selectedAsset.metadata && Object.keys(selectedAsset.metadata).length > 0 && (
                   <div>
-                    <h3 className="text-lg font-semibold text-white mb-3">Metadata</h3>
-                    <pre className="bg-slate-900 p-4 rounded-lg text-xs text-gray-300 overflow-x-auto">
+                    <h3 className="text-lg font-semibold text-white mb-3">Full Metadata</h3>
+                    <pre className="bg-slate-900 p-4 rounded-lg text-xs text-gray-300 overflow-x-auto max-h-96">
                       {JSON.stringify(selectedAsset.metadata, null, 2)}
                     </pre>
                   </div>
