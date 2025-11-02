@@ -418,6 +418,51 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return { activity }
   })
 
+  // Test MinIO connection
+  fastify.get('/test-minio', {
+    preHandler: [fastify.authenticate, requireAdmin],
+    schema: {
+      description: 'Test MinIO connection and configuration',
+      summary: 'Test MinIO',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+    }
+  }, async (_request, reply) => {
+    try {
+      const { minioStorageService } = await import('../services/minio.service')
+
+      const testResult: any = {
+        isAvailable: minioStorageService.isAvailable(),
+        envVars: {
+          MINIO_ENDPOINT: process.env.MINIO_ENDPOINT,
+          MINIO_PORT: process.env.MINIO_PORT,
+          MINIO_USE_SSL: process.env.MINIO_USE_SSL,
+          MINIO_ROOT_USER: process.env.MINIO_ROOT_USER ? 'SET (hidden)' : 'NOT SET',
+          MINIO_ROOT_PASSWORD: process.env.MINIO_ROOT_PASSWORD ? 'SET (hidden)' : 'NOT SET',
+          MINIO_PUBLIC_HOST: process.env.MINIO_PUBLIC_HOST,
+        }
+      }
+
+      if (minioStorageService.isAvailable()) {
+        try {
+          // Try to list a single file from the assets bucket
+          testResult.testListAssets = await minioStorageService.listFiles('assets')
+          testResult.assetsCount = testResult.testListAssets.length
+        } catch (err: any) {
+          testResult.listError = err.message
+          testResult.listErrorStack = err.stack
+        }
+      }
+
+      return testResult
+    } catch (error: any) {
+      return {
+        error: error.message,
+        stack: error.stack
+      }
+    }
+  })
+
   // List MinIO buckets and files
   fastify.get('/minio-buckets', {
     preHandler: [fastify.authenticate, requireAdmin],
