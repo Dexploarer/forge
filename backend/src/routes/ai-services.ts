@@ -1,8 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
-import { generateText } from 'ai'
-import { google } from '@ai-sdk/google'
+import { generateText, gateway } from 'ai'
 import { aiServiceCalls } from '../database/schema'
 import { ForbiddenError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -408,11 +407,8 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       let imageUrl: string
       let revisedPrompt: string | undefined
 
-      // Use Google Gemini for image generation
-      fastify.log.info(`[Image Generation] Using Google Gemini model: ${imageModel}`)
-
-      // Extract model name (remove 'google/' prefix)
-      const modelName = imageModel.replace('google/', '')
+      // Use AI Gateway for image generation
+      fastify.log.info(`[Image Generation] Using AI Gateway with model: ${imageModel}`)
 
       // Create detailed image generation prompt
       const imagePrompt = `Create a ${quality} quality, ${style} style image for a game character/asset.
@@ -429,7 +425,7 @@ Requirements:
 IMPORTANT: Return the image as a file, not as code or description.`
 
       const result = await generateText({
-        model: google(modelName),
+        model: gateway(imageModel),
         prompt: imagePrompt,
       })
 

@@ -31,8 +31,6 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.40",
-    "@ai-sdk/google": "^2.0.26",
-    "@ai-sdk/openai": "^2.0.59",
     "@elevenlabs/elevenlabs-js": "^2.21.0",
     "@fastify/cors": "^11.1.0",
     "@fastify/multipart": "^9.3.0",
