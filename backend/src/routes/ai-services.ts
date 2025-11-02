@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
-import { generateText, createGateway } from 'ai'
+import { generateText } from 'ai'
 import { aiServiceCalls } from '../database/schema'
 import { ForbiddenError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -11,11 +11,6 @@ import { openaiService } from '../services/openai.service'
 import { meshyService } from '../services/meshy.service'
 import { embeddingsService } from '../services/embeddings.service'
 import { env } from '../config/env'
-
-// Create gateway instance with ONLY AI_GATEWAY_API_KEY
-const gateway = createGateway({
-  apiKey: env.AI_GATEWAY_API_KEY || '',
-})
 
 const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -430,7 +425,10 @@ Requirements:
 IMPORTANT: Return the image as a file, not as code or description.`
 
       const result = await generateText({
-        model: gateway(imageModel),
+        model: imageModel, // Use model string directly, NOT gateway()
+        providerOptions: {
+          google: { responseModalities: ['TEXT', 'IMAGE'] }, // Required for image generation
+        },
         prompt: imagePrompt,
       })
 
