@@ -80,7 +80,7 @@ export default function QuestsPage() {
     { value: 'all', label: 'All' },
     { value: 'draft', label: 'Draft' },
     { value: 'active', label: 'Active' },
-    { value: 'completed', label: 'Completed' },
+    { value: 'archived', label: 'Archived' },
   ]
 
   useEffect(() => {
@@ -136,7 +136,7 @@ export default function QuestsPage() {
       // Convert objectives string to array of objective objects
       const objectivesArray = newQuest.objectives
         .split('\n')
-        .map((o, idx) => o.trim())
+        .map(o => o.trim())
         .filter(Boolean)
         .map((desc, idx) => ({
           id: `obj${idx + 1}`,
@@ -325,7 +325,7 @@ export default function QuestsPage() {
     switch (status) {
       case 'active':
         return 'success'
-      case 'completed':
+      case 'archived':
         return 'secondary'
       case 'draft':
         return 'warning'
