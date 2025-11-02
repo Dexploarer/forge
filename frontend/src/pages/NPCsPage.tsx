@@ -84,17 +84,25 @@ export default function NPCsPage() {
 
     setIsCreating(true)
     try {
+      const payload: Record<string, any> = {
+        name: newNpc.name,
+        personality: newNpc.personality,
+      }
+
+      // Only include optional fields if they have values
+      if (newNpc.faction?.trim()) {
+        payload.faction = newNpc.faction
+      }
+      if (newNpc.voiceId?.trim()) {
+        payload.voiceId = newNpc.voiceId
+      }
+
       const response = await apiFetch('/api/npcs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: newNpc.name,
-          personality: newNpc.personality,
-          faction: newNpc.faction || null,
-          voiceId: newNpc.voiceId || null,
-        }),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
