@@ -2,6 +2,7 @@ import { usePrivy } from '@privy-io/react-auth'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import AdminPage from './pages/AdminPage'
+import DebugAuthPage from './pages/DebugAuthPage'
 
 function App() {
   const { ready, authenticated } = usePrivy()
@@ -21,6 +22,10 @@ function App() {
   // Simple routing based on authentication status
   // For production, consider using React Router or similar
   const path = window.location.pathname
+
+  if (path === '/debug-auth') {
+    return <DebugAuthPage />
+  }
 
   if (path === '/dashboard') {
     return <DashboardPage />
