@@ -5,7 +5,6 @@ import { apiKeys } from '../database/schema/system'
 import { users } from '../database/schema'
 import { validateApiKey } from '../helpers/api-key-generator'
 import { UnauthorizedError } from '../utils/errors'
-import { env } from '../config/env'
 
 /**
  * API Key Authentication Plugin
@@ -79,10 +78,8 @@ const apiKeyAuthPlugin: FastifyPluginAsync = async (fastify) => {
         throw new UnauthorizedError('User not found for API key')
       }
 
-      // Check if wallet is in admin whitelist
-      const isAdmin = user.walletAddress
-        ? env.ADMIN_WALLETS.includes(user.walletAddress.toLowerCase())
-        : false
+      // Everyone who is authenticated has full access
+      const isAdmin = true
 
       // Attach user with admin flag to request
       request.user = {

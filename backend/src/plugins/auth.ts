@@ -112,10 +112,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         throw new UnauthorizedError('Failed to create or find user')
       }
 
-      // Check if wallet is in admin whitelist
-      const isAdmin = user.walletAddress
-        ? env.ADMIN_WALLETS.includes(user.walletAddress.toLowerCase())
-        : false
+      // Everyone who is authenticated has full access
+      const isAdmin = true
 
       // Attach user with admin flag to request
       request.user = {
@@ -163,10 +161,8 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       })
 
       if (user) {
-        // Check if wallet is in admin whitelist
-        const isAdmin = user.walletAddress
-          ? env.ADMIN_WALLETS.includes(user.walletAddress.toLowerCase())
-          : false
+        // Everyone who is authenticated has full access
+        const isAdmin = true
 
         request.user = {
           ...user,

@@ -25,12 +25,6 @@ const envSchema = z.object({
   PRIVY_APP_ID: z.string().default('test-app-id'),
   PRIVY_APP_SECRET: z.string().default('test-app-secret'),
 
-  // Admin Access Control (comma-separated wallet addresses)
-  ADMIN_WALLETS: z.string().optional().transform((val) => {
-    if (!val || val === '') return []
-    return val.split(',').map(addr => addr.trim().toLowerCase())
-  }),
-
   // File Storage (Optional)
   FILE_STORAGE_PATH: z.string().default('./uploads'),
   FILE_SERVER_URL: z.string().optional().transform(val => {
