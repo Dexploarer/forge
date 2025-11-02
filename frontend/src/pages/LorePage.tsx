@@ -301,7 +301,7 @@ export default function LorePage() {
       })
 
       // Call image generation endpoint
-      const response = await apiFetch('/api/ai-services/generate-image', {
+      const response = await apiFetch('/api/ai/generate-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -323,8 +323,9 @@ export default function LorePage() {
       const data = await response.json()
       console.log('[LorePage] handleGenerateImage: Image generated', {
         imageUrl: data.imageUrl,
-        tokensUsed: data.tokensUsed,
         cost: data.cost,
+        costFormatted: data.costFormatted,
+        revisedPrompt: data.revisedPrompt,
       })
 
       // Update lore with the generated image

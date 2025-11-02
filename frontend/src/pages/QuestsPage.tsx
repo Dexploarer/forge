@@ -405,7 +405,7 @@ export default function QuestsPage() {
       })
 
       // Call image generation endpoint
-      const response = await apiFetch('/api/ai-services/generate-image', {
+      const response = await apiFetch('/api/ai/generate-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -427,8 +427,9 @@ export default function QuestsPage() {
       const data = await response.json()
       console.log('[QuestsPage] handleGenerateImage: Image generated', {
         imageUrl: data.imageUrl,
-        tokensUsed: data.tokensUsed,
         cost: data.cost,
+        costFormatted: data.costFormatted,
+        revisedPrompt: data.revisedPrompt,
       })
 
       // Update quest with the generated image

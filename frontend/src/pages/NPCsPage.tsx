@@ -214,7 +214,7 @@ export default function NPCsPage() {
       })
 
       // Call image generation endpoint
-      const response = await apiFetch('/api/ai-services/generate-image', {
+      const response = await apiFetch('/api/ai/generate-image', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -236,8 +236,9 @@ export default function NPCsPage() {
       const data = await response.json()
       console.log('[NPCsPage] handleGenerateImage: Image generated', {
         imageUrl: data.imageUrl,
-        tokensUsed: data.tokensUsed,
         cost: data.cost,
+        costFormatted: data.costFormatted,
+        revisedPrompt: data.revisedPrompt,
       })
 
       // Update NPC with the generated image
