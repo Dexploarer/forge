@@ -456,12 +456,12 @@ IMPORTANT: Return the image as a file, not as code or description.`
       // Calculate cost - Gemini image models are $0.30 per 1M tokens
       const cost = 0.30 / 1000000 * 1000 // Estimate 1000 tokens per image
 
-      // Record usage
+      // Record usage (don't store full base64 image to avoid DB size issues)
       await recordUsage(fastify.db, request.user!.id, 'google', {
         endpoint: '/images/generations',
         model: imageModel,
         requestData: { prompt, size, quality, style },
-        responseData: { imageUrl },
+        responseData: { imageGenerated: true, imageLength: imageUrl.length },
         cost,
         durationMs: Date.now() - startTime,
         status: 'success',
