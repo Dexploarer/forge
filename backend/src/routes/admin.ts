@@ -422,7 +422,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/sync-minio-assets', {
     preHandler: [fastify.authenticate, requireAdmin],
     schema: {
-      description: 'Sync assets from MinIO bucket to database (admin only)',
+      description: 'Sync assets from MinIO buckets to database (admin only)',
       summary: 'Sync MinIO to DB',
       tags: ['admin'],
       security: [{ bearerAuth: [] }],
@@ -440,90 +440,112 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     try {
       fastify.log.info('🔄 Admin triggered MinIO to DB sync')
 
-      const { minioClient } = fastify as any
-      const MINIO_BUCKET = process.env.MINIO_BUCKET || 'forge-assets'
-      const MINIO_PUBLIC_URL = process.env.MINIO_PUBLIC_ENDPOINT || 'https://bucket-staging-4c7a.up.railway.app'
+      const { minioStorageService } = await import('../services/minio.service')
 
-      const stream = minioClient.listObjectsV2(MINIO_BUCKET, '', true)
-      const minioFiles: any[] = []
-
-      await new Promise((resolve, reject) => {
-        stream.on('data', (obj: any) => minioFiles.push(obj))
-        stream.on('end', resolve)
-        stream.on('error', reject)
-      })
-
-      fastify.log.info(`Found ${minioFiles.length} files in MinIO bucket`)
-
-      let created = 0
-      let skipped = 0
-
-      for (const file of minioFiles) {
-        const key = file.name
-
-        // Check if asset with this MinIO key already exists
-        const existing = await fastify.db.query.assets.findFirst({
-          where: sql`${assets.metadata}->>'minioKey' = ${key}`,
-          columns: { id: true }
-        })
-
-        if (existing) {
-          skipped++
-          continue
+      if (!minioStorageService.isAvailable()) {
+        return {
+          success: false,
+          message: 'MinIO service is not available',
+          created: 0,
+          skipped: 0,
+          total: 0,
         }
-
-        // Determine type from extension (skip if not a known type)
-        const ext = key.split('.').pop()?.toLowerCase()
-        let type: 'model' | 'texture' | 'audio' | null = null
-        if (['glb', 'gltf', 'obj', 'fbx'].includes(ext || '')) type = 'model'
-        else if (['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext || '')) type = 'texture'
-        else if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext || '')) type = 'audio'
-
-        if (!type) {
-          fastify.log.warn(`Skipping unsupported file type: ${key}`)
-          skipped++
-          continue
-        }
-
-        const name = key.split('/').pop() || key
-        const fileUrl = `${MINIO_PUBLIC_URL}/${key}`
-
-        const mimeTypes: Record<string, string> = {
-          glb: 'model/gltf-binary',
-          gltf: 'model/gltf+json',
-          png: 'image/png',
-          jpg: 'image/jpeg',
-          jpeg: 'image/jpeg',
-          webp: 'image/webp',
-          mp3: 'audio/mpeg',
-          wav: 'audio/wav',
-          ogg: 'audio/ogg',
-        }
-
-        await fastify.db.insert(assets).values({
-          name: name.replace(/\.[^/.]+$/, ''),
-          description: `Synced from MinIO: ${key}`,
-          type,
-          status: 'published',
-          visibility: 'public',
-          fileUrl,
-          thumbnailUrl: type === 'texture' ? fileUrl : null,
-          fileSize: file.size,
-          mimeType: mimeTypes[ext || ''] || 'application/octet-stream',
-          metadata: {
-            minioKey: key,
-            minioBucket: MINIO_BUCKET,
-            storageMode: 'minio',
-            syncedAt: new Date().toISOString(),
-          },
-          ownerId: request.user!.id,
-        })
-
-        created++
-        fastify.log.info(`Created asset: ${name}`)
       }
 
-      const message = `Synced ${created} new assets, skipped ${skipped} existing`
+      const MINIO_PUBLIC_HOST = process.env.MINIO_PUBLIC_HOST || 'bucket-staging-4c7a.up.railway.app'
+
+      // Scan all MinIO buckets
+      const buckets = ['assets', 'uploads', 'audio', '3d-models', 'images']
+      let created = 0
+      let skipped = 0
+      let totalFiles = 0
+
+      for (const bucket of buckets) {
+        try {
+          const files = await minioStorageService.listFiles(bucket)
+          totalFiles += files.length
+
+          fastify.log.info(`Found ${files.length} files in bucket: ${bucket}`)
+
+          for (const filename of files) {
+            const key = `${bucket}/${filename}`
+
+            // Check if asset with this MinIO key already exists
+            const existing = await fastify.db.query.assets.findFirst({
+              where: sql`${assets.metadata}->>'minioKey' = ${filename}`,
+              columns: { id: true }
+            })
+
+            if (existing) {
+              skipped++
+              continue
+            }
+
+            // Determine type from extension
+            const ext = filename.split('.').pop()?.toLowerCase()
+            let type: 'model' | 'texture' | 'audio' | null = null
+            if (['glb', 'gltf', 'obj', 'fbx'].includes(ext || '')) type = 'model'
+            else if (['png', 'jpg', 'jpeg', 'webp', 'svg'].includes(ext || '')) type = 'texture'
+            else if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext || '')) type = 'audio'
+
+            if (!type) {
+              fastify.log.debug(`Skipping unsupported file type: ${filename}`)
+              skipped++
+              continue
+            }
+
+            const name = filename.split('/').pop() || filename
+            const fileUrl = `https://${MINIO_PUBLIC_HOST}/${bucket}/${filename}`
+
+            const mimeTypes: Record<string, string> = {
+              glb: 'model/gltf-binary',
+              gltf: 'model/gltf+json',
+              png: 'image/png',
+              jpg: 'image/jpeg',
+              jpeg: 'image/jpeg',
+              webp: 'image/webp',
+              mp3: 'audio/mpeg',
+              wav: 'audio/wav',
+              ogg: 'audio/ogg',
+            }
+
+            // Get file stats for size
+            let fileSize = 0
+            try {
+              const stats = await minioStorageService.getFileStats(bucket, filename)
+              fileSize = stats.size
+            } catch (err) {
+              fastify.log.warn(`Could not get file size for ${filename}`)
+            }
+
+            await fastify.db.insert(assets).values({
+              name: name.replace(/\.[^/.]+$/, ''),
+              description: `Synced from MinIO: ${bucket}/${filename}`,
+              type,
+              status: 'published',
+              visibility: 'public',
+              fileUrl,
+              thumbnailUrl: type === 'texture' ? fileUrl : null,
+              fileSize,
+              mimeType: mimeTypes[ext || ''] || 'application/octet-stream',
+              metadata: {
+                minioKey: filename,
+                minioBucket: bucket,
+                storageMode: 'minio',
+                syncedAt: new Date().toISOString(),
+              },
+              ownerId: request.user!.id,
+            })
+
+            created++
+            fastify.log.info(`Created asset: ${name} (${bucket})`)
+          }
+        } catch (bucketError: any) {
+          fastify.log.warn(`Failed to process bucket ${bucket}:`, bucketError.message)
+        }
+      }
+
+      const message = `Synced ${created} new assets, skipped ${skipped} existing from ${totalFiles} total files`
       fastify.log.info(`✅ ${message}`)
 
       return {
@@ -531,7 +553,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         message,
         created,
         skipped,
-        total: minioFiles.length,
+        total: totalFiles,
       }
     } catch (error: any) {
       fastify.log.error('Failed to sync MinIO assets:', error)
