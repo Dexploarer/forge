@@ -8,6 +8,7 @@ import { serializeAllTimestamps } from '../helpers/serialization'
 import { generateNPCStats, generateLootTable, generateBasicDialog } from '../helpers/npc-generator'
 import { AISDKService } from '../services/ai-sdk.service'
 import { embeddingsService } from '../services/embeddings.service'
+import { getOrCreateDefaultProject } from '../helpers/default-project'
 
 const npcRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -21,7 +22,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       querystring: z.object({
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(100).default(20),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         race: z.string().optional(),
         class: z.string().optional(),
         faction: z.string().optional(),
@@ -57,7 +58,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
     const { page, limit, projectId, race, faction, behavior, location, status } = request.query as {
       page: number
       limit: number
-      projectId: string
+      projectId?: string
       race?: string
       class?: string
       faction?: string
@@ -66,10 +67,20 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       status?: string
     }
 
-    await verifyProjectMembership(fastify, projectId, request)
+    // Verify project membership if projectId is provided
+    if (projectId) {
+      await verifyProjectMembership(fastify, projectId, request)
+    }
 
     const offset = (page - 1) * limit
-    const conditions = [eq(npcs.projectId, projectId)]
+    const conditions = []
+
+    // Filter by projectId if provided, otherwise filter by ownerId
+    if (projectId) {
+      conditions.push(eq(npcs.projectId, projectId))
+    } else {
+      conditions.push(eq(npcs.ownerId, request.user!.id))
+    }
 
     if (race) conditions.push(eq(npcs.race, race))
     if ((request.query as any).class) conditions.push(eq(npcs.class, (request.query as any).class))
@@ -125,7 +136,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       body: z.object({
         name: z.string().min(1).max(255),
         description: z.string().optional(),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         title: z.string().max(255).optional(),
         race: z.string().max(100).optional(),
         class: z.string().max(100).optional(),
@@ -168,10 +179,15 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const data = request.body as any
 
-    await verifyProjectMembership(fastify, data.projectId, request)
+    // Get or create default project if projectId not provided
+    const projectId = data.projectId || await getOrCreateDefaultProject(fastify, request.user!.id)
+
+    // Verify project membership
+    await verifyProjectMembership(fastify, projectId, request)
 
     const [npc] = await fastify.db.insert(npcs).values({
       ...data,
+      projectId,
       ownerId: request.user!.id,
     }).returning()
 

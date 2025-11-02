@@ -8,6 +8,7 @@ import { serializeAllTimestamps } from '../helpers/serialization'
 import { getQuestChain } from '../helpers/quest-chain'
 import { AISDKService } from '../services/ai-sdk.service'
 import { embeddingsService } from '../services/embeddings.service'
+import { getOrCreateDefaultProject } from '../helpers/default-project'
 
 const questRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -21,7 +22,7 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
       querystring: z.object({
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(100).default(20),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         questType: z.enum(['main', 'side', 'daily', 'event']).optional(),
         difficulty: z.enum(['easy', 'medium', 'hard', 'expert']).optional(),
         minLevel: z.coerce.number().int().optional(),
@@ -55,7 +56,7 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
     const { page, limit, projectId, questType, difficulty, minLevel, maxLevel, status } = request.query as {
       page: number
       limit: number
-      projectId: string
+      projectId?: string
       questType?: string
       difficulty?: string
       minLevel?: number
@@ -63,10 +64,20 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
       status?: string
     }
 
-    await verifyProjectMembership(fastify, projectId, request)
+    // Verify project membership if projectId is provided
+    if (projectId) {
+      await verifyProjectMembership(fastify, projectId, request)
+    }
 
     const offset = (page - 1) * limit
-    const conditions = [eq(quests.projectId, projectId)]
+    const conditions = []
+
+    // Filter by projectId if provided, otherwise filter by ownerId
+    if (projectId) {
+      conditions.push(eq(quests.projectId, projectId))
+    } else {
+      conditions.push(eq(quests.ownerId, request.user!.id))
+    }
 
     if (questType) conditions.push(eq(quests.questType, questType))
     if (difficulty) conditions.push(eq(quests.difficulty, difficulty))
@@ -120,7 +131,7 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
       body: z.object({
         name: z.string().min(1).max(255),
         description: z.string().min(1),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         questType: z.enum(['main', 'side', 'daily', 'event']).default('side'),
         difficulty: z.enum(['easy', 'medium', 'hard', 'expert']).default('medium'),
         minLevel: z.number().int().min(1).default(1),
@@ -175,10 +186,15 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const data = request.body as any
 
-    await verifyProjectMembership(fastify, data.projectId, request)
+    // Get or create default project if projectId not provided
+    const projectId = data.projectId || await getOrCreateDefaultProject(fastify, request.user!.id)
+
+    // Verify project membership
+    await verifyProjectMembership(fastify, projectId, request)
 
     const [quest] = await fastify.db.insert(quests).values({
       ...data,
+      projectId,
       ownerId: request.user!.id,
     }).returning()
 

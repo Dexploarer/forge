@@ -8,6 +8,7 @@ import { serializeAllTimestamps } from '../helpers/serialization'
 import { buildTimeline, findRelatedContent } from '../helpers/lore-timeline'
 import { AISDKService } from '../services/ai-sdk.service'
 import { embeddingsService } from '../services/embeddings.service'
+import { getOrCreateDefaultProject } from '../helpers/default-project'
 
 const loreRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -21,7 +22,7 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       querystring: z.object({
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(100).default(20),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         category: z.string().optional(),
         era: z.string().optional(),
         region: z.string().optional(),
@@ -55,7 +56,7 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
     const { page, limit, projectId, category, era, region, status, search } = request.query as {
       page: number
       limit: number
-      projectId: string
+      projectId?: string
       category?: string
       era?: string
       region?: string
@@ -63,13 +64,22 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       search?: string
     }
 
-    // Verify user has access to the project
-    await verifyProjectMembership(fastify, projectId, request)
+    // Verify user has access to the project if projectId is provided
+    if (projectId) {
+      await verifyProjectMembership(fastify, projectId, request)
+    }
 
     const offset = (page - 1) * limit
 
     // Build where conditions
-    const conditions = [eq(loreEntries.projectId, projectId)]
+    const conditions = []
+
+    // Filter by projectId if provided, otherwise filter by ownerId
+    if (projectId) {
+      conditions.push(eq(loreEntries.projectId, projectId))
+    } else {
+      conditions.push(eq(loreEntries.ownerId, request.user!.id))
+    }
 
     if (category) {
       conditions.push(eq(loreEntries.category, category))
@@ -139,7 +149,7 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
         title: z.string().min(1).max(255),
         content: z.string().min(1).max(50000),
         summary: z.string().optional(),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         category: z.string().max(100).optional(),
         tags: z.array(z.string()).default([]),
         era: z.string().max(255).optional(),
@@ -168,7 +178,7 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       title: string
       content: string
       summary?: string
-      projectId: string
+      projectId?: string
       category?: string
       tags?: string[]
       era?: string
@@ -182,14 +192,17 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       status?: string
     }
 
+    // Get or create default project if projectId not provided
+    const projectId = data.projectId || await getOrCreateDefaultProject(fastify, request.user!.id)
+
     // Verify user has access to the project
-    await verifyProjectMembership(fastify, data.projectId, request)
+    await verifyProjectMembership(fastify, projectId, request)
 
     const [entry] = await fastify.db.insert(loreEntries).values({
       title: data.title,
       content: data.content,
       summary: data.summary,
-      projectId: data.projectId,
+      projectId,
       ownerId: request.user!.id,
       category: data.category,
       tags: data.tags || [],
