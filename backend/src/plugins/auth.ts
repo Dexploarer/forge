@@ -43,64 +43,28 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // Authentication preHandler hook - Privy verification + wallet whitelist admin
+  // Authentication preHandler hook - NO AUTH MODE (password-protected frontend)
+  // Since the frontend is password-protected, everyone who reaches the backend is admin
   fastify.decorate('authenticate', async function(request, _reply) {
     try {
-      // Extract token from Authorization header
-      const authHeader = request.headers.authorization
-      if (!authHeader) {
-        throw new UnauthorizedError('Missing authorization header')
-      }
+      // Create or find a dummy admin user for password-protected access
+      const dummyPrivyId = 'password-gate-admin'
 
-      const token = authHeader.replace('Bearer ', '')
-      if (!token) {
-        throw new UnauthorizedError('Invalid authorization format')
-      }
-
-      // Verify Privy token
-      let privyUserId: string
-
-      if (env.NODE_ENV === 'test' || token.startsWith('mock-')) {
-        // Test mode
-        privyUserId = token.includes('admin') ? 'test-admin-privy-id' : 'test-member-privy-id'
-      } else {
-        // Production: Verify Privy JWT
-        const claims = await privy.verifyAuthToken(token)
-        privyUserId = claims.userId
-      }
-
-      // Find or create user in database
       let user = await db.query.users.findFirst({
-        where: eq(users.privyUserId, privyUserId)
+        where: eq(users.privyUserId, dummyPrivyId)
       })
 
       if (!user) {
-        // Create user on first login
-        const privyUser = await privy.getUser(privyUserId)
-
-        const walletAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'wallet') as any
-        const emailAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'email') as any
-        const farcasterAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'farcaster') as any
-
-        const walletAddress = privyUser.wallet?.address || walletAccount?.address || null
-        const email = privyUser.email?.address || emailAccount?.address || null
-
+        // Create dummy admin user on first request
         const [newUser] = await db.insert(users).values({
-          privyUserId,
-          email: email || null,
-          walletAddress: walletAddress || null,
-          farcasterFid: farcasterAccount?.fid || null,
-          farcasterUsername: farcasterAccount?.username || null,
-          farcasterVerified: farcasterAccount?.verifiedAt ? true : false,
-          farcasterProfile: farcasterAccount ? {
-            displayName: farcasterAccount.displayName,
-            pfp: farcasterAccount.pfp,
-            bio: farcasterAccount.bio,
-          } : null,
-          role: 'member', // Keep for backwards compatibility
+          privyUserId: dummyPrivyId,
+          email: 'admin@forge.local',
+          displayName: 'Admin',
+          role: 'admin',
           lastLoginAt: new Date(),
         }).returning()
         user = newUser
+        fastify.log.info('Created password-gate admin user')
       } else {
         // Update last login
         await db.update(users)
@@ -112,7 +76,7 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         throw new UnauthorizedError('Failed to create or find user')
       }
 
-      // Everyone who is authenticated has full access
+      // Everyone is admin in password-protected mode
       const isAdmin = true
 
       // Attach user with admin flag to request
@@ -121,52 +85,31 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         isAdmin
       }
 
-      fastify.log.info({
+      fastify.log.debug({
         userId: user.id,
-        wallet: user.walletAddress,
         isAdmin
-      }, 'Authentication successful')
+      }, 'Password-gate authentication successful')
 
     } catch (error) {
-      if (error instanceof UnauthorizedError) {
-        throw error
-      }
       fastify.log.error({ error }, 'Authentication failed')
       throw new UnauthorizedError('Unauthorized')
     }
   })
 
-  // Optional authentication (doesn't fail if no token)
+  // Optional authentication - same as authenticate in password-gate mode
   fastify.decorate('optionalAuth', async function(request, _reply) {
     try {
-      const authHeader = request.headers.authorization
-      if (!authHeader) return
+      // In password-gate mode, treat optional auth the same as required auth
+      const dummyPrivyId = 'password-gate-admin'
 
-      const token = authHeader.replace('Bearer ', '')
-      if (!token) return
-
-      // Verify Privy token
-      let privyUserId: string
-
-      if (env.NODE_ENV === 'test' || token.startsWith('mock-')) {
-        privyUserId = token.includes('admin') ? 'test-admin-privy-id' : 'test-member-privy-id'
-      } else {
-        const claims = await privy.verifyAuthToken(token)
-        privyUserId = claims.userId
-      }
-
-      // Find user in database
       const user = await db.query.users.findFirst({
-        where: eq(users.privyUserId, privyUserId)
+        where: eq(users.privyUserId, dummyPrivyId)
       })
 
       if (user) {
-        // Everyone who is authenticated has full access
-        const isAdmin = true
-
         request.user = {
           ...user,
-          isAdmin
+          isAdmin: true
         }
       }
     } catch (error) {

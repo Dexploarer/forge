@@ -25,3 +25,6 @@ export * from './3d-features'
 export * from './music'
 export * from './sound-effects'
 export * from './voice'
+
+// Early access
+export * from './early-access'

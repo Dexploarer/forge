@@ -19,6 +19,7 @@ import activityLoggerPlugin from './plugins/activity-logger-plugin'
 
 // Routes
 import healthRoutes from './routes/health'
+import earlyAccessRoutes from './routes/early-access'
 import authRoutes from './routes/auth'
 import userRoutes from './routes/users'
 import teamRoutes from './routes/teams'
@@ -101,6 +102,7 @@ export async function buildServer() {
 
   // Register routes
   await server.register(healthRoutes)
+  await server.register(earlyAccessRoutes, { prefix: '/api/early-access' })
   await server.register(authRoutes, { prefix: '/api/auth' })
   await server.register(userRoutes, { prefix: '/api/users' })
   await server.register(teamRoutes, { prefix: '/api/teams' })

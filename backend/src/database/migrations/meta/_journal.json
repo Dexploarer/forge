@@ -50,6 +50,13 @@
       "when": 1761997655290,
       "tag": "0006_mysterious_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762047396210,
+      "tag": "0007_lethal_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

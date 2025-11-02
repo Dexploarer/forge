@@ -1,14 +1,23 @@
-import { usePrivy } from '@privy-io/react-auth'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
+import { useState, useEffect } from 'react'
+import PasswordGate from './pages/PasswordGate'
 import AdminPage from './pages/AdminPage'
-import DebugAuthPage from './pages/DebugAuthPage'
 
 function App() {
-  const { ready, authenticated } = usePrivy()
+  const [authenticated, setAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  // Show loading state while Privy initializes
-  if (!ready) {
+  // Check if already authenticated
+  useEffect(() => {
+    const isAuth = localStorage.getItem('authenticated') === 'true'
+    setAuthenticated(isAuth)
+    setLoading(false)
+  }, [])
+
+  const handleAuthenticated = () => {
+    setAuthenticated(true)
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-center">
@@ -19,24 +28,12 @@ function App() {
     )
   }
 
-  // Simple routing based on authentication status
-  // For production, consider using React Router or similar
-  const path = window.location.pathname
-
-  if (path === '/debug-auth') {
-    return <DebugAuthPage />
+  if (!authenticated) {
+    return <PasswordGate onAuthenticated={handleAuthenticated} />
   }
 
-  if (path === '/dashboard') {
-    return <DashboardPage />
-  }
-
-  if (path === '/admin') {
-    return <AdminPage />
-  }
-
-  // Default to login page
-  return authenticated ? <DashboardPage /> : <LoginPage />
+  // Always show admin page when authenticated
+  return <AdminPage />
 }
 
 export default App
