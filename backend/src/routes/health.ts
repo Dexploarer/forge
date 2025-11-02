@@ -3,6 +3,16 @@ import { checkDatabaseHealth } from '../database/db'
 import { env } from '../config/env'
 
 const healthRoutes: FastifyPluginAsync = async (fastify) => {
+  // Root endpoint
+  fastify.get('/', async () => {
+    return {
+      name: 'Forge Backend API',
+      version: '1.0.0',
+      status: 'online',
+      documentation: '/documentation',
+    }
+  })
+
   // Basic health check
   fastify.get('/health', async () => {
     return {
