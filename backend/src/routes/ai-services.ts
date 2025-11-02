@@ -425,10 +425,7 @@ Requirements:
 IMPORTANT: Return the image as a file, not as code or description.`
 
       const result = await generateText({
-        model: imageModel, // Use model string directly, NOT gateway()
-        providerOptions: {
-          google: { responseModalities: ['TEXT', 'IMAGE'] }, // Required for image generation
-        },
+        model: imageModel,
         prompt: imagePrompt,
       })
 
