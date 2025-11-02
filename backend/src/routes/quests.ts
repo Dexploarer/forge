@@ -202,6 +202,43 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
       throw new Error('Failed to create quest')
     }
 
+    // Auto-generate and store embedding for semantic search
+    try {
+      const embeddingText = [
+        quest.name,
+        quest.description,
+        quest.questType,
+        quest.difficulty,
+        quest.location,
+        quest.startDialog,
+        quest.completeDialog,
+        ...(quest.tags || []),
+      ]
+        .filter(Boolean)
+        .join(' | ')
+
+      if (embeddingText) {
+        await embeddingsService.storeEmbedding({
+          contentType: 'quest',
+          contentId: quest.id,
+          text: embeddingText,
+          metadata: {
+            name: quest.name,
+            questType: quest.questType,
+            difficulty: quest.difficulty,
+            minLevel: quest.minLevel,
+            maxLevel: quest.maxLevel,
+            location: quest.location,
+            repeatable: quest.repeatable,
+            projectId: quest.projectId,
+          },
+        })
+      }
+    } catch (error) {
+      fastify.log.error({ error, questId: quest.id }, 'Failed to store quest embedding')
+      // Don't fail the request if embedding fails
+    }
+
     reply.code(201).send({ quest: serializeAllTimestamps(quest) })
   })
 

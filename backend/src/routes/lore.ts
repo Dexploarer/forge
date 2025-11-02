@@ -221,6 +221,40 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       throw new Error('Failed to create lore entry')
     }
 
+    // Auto-generate and store embedding for semantic search
+    try {
+      const embeddingText = [
+        entry.title,
+        entry.summary,
+        entry.content,
+        entry.category,
+        entry.era,
+        entry.region,
+        ...(entry.tags || []),
+      ]
+        .filter(Boolean)
+        .join(' | ')
+
+      if (embeddingText) {
+        await embeddingsService.storeEmbedding({
+          contentType: 'lore',
+          contentId: entry.id,
+          text: embeddingText,
+          metadata: {
+            title: entry.title,
+            category: entry.category,
+            era: entry.era,
+            region: entry.region,
+            importanceLevel: entry.importanceLevel,
+            projectId: entry.projectId,
+          },
+        })
+      }
+    } catch (error) {
+      fastify.log.error({ error, loreEntryId: entry.id }, 'Failed to store lore embedding')
+      // Don't fail the request if embedding fails
+    }
+
     reply.code(201).send({ loreEntry: serializeAllTimestamps(entry) })
   })
 

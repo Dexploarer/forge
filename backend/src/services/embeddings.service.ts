@@ -1,7 +1,7 @@
 import { aiSDKService } from './ai-sdk.service'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { sql } from 'drizzle-orm'
 import * as schema from '../database/schema'
+import { qdrantService, CONTENT_TYPES, EMBEDDING_MODELS, type ContentType } from './qdrant.service'
 
 // =====================================================
 // EMBEDDINGS SERVICE - Text Embedding and Similarity
@@ -12,11 +12,12 @@ export interface SimilarContent {
   type: string
   content: string
   similarity: number
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown> | undefined
 }
 
 export class EmbeddingsService {
   private model = 'text-embedding-3-small'
+  private embeddingDimensions = 1536
 
   /**
    * Generate embedding for text using AI Gateway
@@ -56,158 +57,175 @@ export class EmbeddingsService {
   }
 
   /**
-   * Find similar NPCs based on description embedding
+   * Store an embedding in Qdrant
+   */
+  async storeEmbedding(params: {
+    contentType: ContentType
+    contentId: string
+    text: string
+    metadata?: Record<string, any>
+  }): Promise<void> {
+    const embedding = await this.embedText(params.text)
+
+    await qdrantService.upsert({
+      contentType: params.contentType,
+      contentId: params.contentId,
+      embedding,
+      sourceText: params.text,
+      embeddingModel: EMBEDDING_MODELS.TEXT_EMBEDDING_3_SMALL,
+      embeddingDimensions: this.embeddingDimensions,
+      metadata: params.metadata,
+    })
+  }
+
+  /**
+   * Store multiple embeddings in Qdrant (batch operation)
+   */
+  async storeBatchEmbeddings(params: {
+    contentType: ContentType
+    items: Array<{
+      contentId: string
+      text: string
+      metadata?: Record<string, any>
+    }>
+  }): Promise<void> {
+    const texts = params.items.map(item => item.text)
+    const embeddings = await this.embedBatch(texts)
+
+    const points = params.items.map((item, index) => ({
+      contentId: item.contentId,
+      embedding: embeddings[index]!,
+      sourceText: item.text,
+      embeddingModel: EMBEDDING_MODELS.TEXT_EMBEDDING_3_SMALL,
+      embeddingDimensions: this.embeddingDimensions,
+      metadata: item.metadata,
+    }))
+
+    await qdrantService.batchUpsert({
+      contentType: params.contentType,
+      points,
+    })
+  }
+
+  /**
+   * Delete an embedding from Qdrant
+   */
+  async deleteEmbedding(params: {
+    contentType: ContentType
+    contentId: string
+  }): Promise<void> {
+    await qdrantService.delete(params)
+  }
+
+  /**
+   * Find similar NPCs based on description embedding (using Qdrant)
    */
   async findSimilarNPCs(
-    db: PostgresJsDatabase<typeof schema>,
+    _db: PostgresJsDatabase<typeof schema>,
     embedding: number[],
-    projectId: string,
+    _projectId: string,
     threshold: number = 0.7,
     limit: number = 10
   ): Promise<SimilarContent[]> {
-    // This would require pgvector extension in production
-    // For now, we'll return a mock implementation
-    const npcs = await db.query.npcs.findMany({
-      where: sql`${schema.npcs.projectId} = ${projectId}`,
-      limit: 50,
+    const results = await qdrantService.search({
+      contentType: CONTENT_TYPES.NPC,
+      queryVector: embedding,
+      limit,
+      threshold,
+      filter: undefined, // Could filter by projectId if we add it to metadata
     })
 
-    const similar: SimilarContent[] = []
-
-    for (const npc of npcs) {
-      // In production, you'd have stored embeddings and use pgvector
-      // For now, we'll do a simple text match simulation
-      if (npc.description) {
-        const npcEmbedding = await this.embedText(npc.description)
-        const similarity = this.cosineSimilarity(embedding, npcEmbedding)
-
-        if (similarity >= threshold) {
-          similar.push({
-            id: npc.id,
-            type: 'npc',
-            content: npc.description,
-            similarity,
-            metadata: {
-              name: npc.name,
-              title: npc.title,
-            },
-          })
-        }
-      }
-    }
-
-    return similar
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit)
+    return results.map(result => ({
+      id: result.payload.contentId,
+      type: 'npc',
+      content: result.payload.sourceText,
+      similarity: result.score,
+      metadata: result.payload.metadata as Record<string, unknown> | undefined,
+    }))
   }
 
   /**
-   * Find similar lore entries
+   * Find similar lore entries (using Qdrant)
    */
   async findSimilarLore(
-    db: PostgresJsDatabase<typeof schema>,
+    _db: PostgresJsDatabase<typeof schema>,
     embedding: number[],
-    projectId: string,
+    _projectId: string,
     threshold: number = 0.7,
     limit: number = 10
   ): Promise<SimilarContent[]> {
-    const lore = await db.query.loreEntries.findMany({
-      where: sql`${schema.loreEntries.projectId} = ${projectId}`,
-      limit: 50,
+    const results = await qdrantService.search({
+      contentType: CONTENT_TYPES.LORE,
+      queryVector: embedding,
+      limit,
+      threshold,
+      filter: undefined,
     })
 
-    const similar: SimilarContent[] = []
-
-    for (const entry of lore) {
-      if (entry.content) {
-        const loreEmbedding = await this.embedText(entry.content)
-        const similarity = this.cosineSimilarity(embedding, loreEmbedding)
-
-        if (similarity >= threshold) {
-          similar.push({
-            id: entry.id,
-            type: 'lore',
-            content: entry.content,
-            similarity,
-            metadata: {
-              title: entry.title,
-              category: entry.category,
-            },
-          })
-        }
-      }
-    }
-
-    return similar
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit)
+    return results.map(result => ({
+      id: result.payload.contentId,
+      type: 'lore',
+      content: result.payload.sourceText,
+      similarity: result.score,
+      metadata: result.payload.metadata as Record<string, unknown> | undefined,
+    }))
   }
 
   /**
-   * Find similar quests
+   * Find similar quests (using Qdrant)
    */
   async findSimilarQuests(
-    db: PostgresJsDatabase<typeof schema>,
+    _db: PostgresJsDatabase<typeof schema>,
     embedding: number[],
-    projectId: string,
+    _projectId: string,
     threshold: number = 0.7,
     limit: number = 10
   ): Promise<SimilarContent[]> {
-    const quests = await db.query.quests.findMany({
-      where: sql`${schema.quests.projectId} = ${projectId}`,
-      limit: 50,
+    const results = await qdrantService.search({
+      contentType: CONTENT_TYPES.QUEST,
+      queryVector: embedding,
+      limit,
+      threshold,
+      filter: undefined,
     })
 
-    const similar: SimilarContent[] = []
-
-    for (const quest of quests) {
-      if (quest.description) {
-        const questEmbedding = await this.embedText(quest.description)
-        const similarity = this.cosineSimilarity(embedding, questEmbedding)
-
-        if (similarity >= threshold) {
-          similar.push({
-            id: quest.id,
-            type: 'quest',
-            content: quest.description,
-            similarity,
-            metadata: {
-              name: quest.name,
-              difficulty: quest.difficulty,
-            },
-          })
-        }
-      }
-    }
-
-    return similar
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit)
+    return results.map(result => ({
+      id: result.payload.contentId,
+      type: 'quest',
+      content: result.payload.sourceText,
+      similarity: result.score,
+      metadata: result.payload.metadata as Record<string, unknown> | undefined,
+    }))
   }
 
   /**
-   * Find similar content across all types
+   * Find similar content across all types (using Qdrant)
    */
   async findSimilar(
-    db: PostgresJsDatabase<typeof schema>,
+    _db: PostgresJsDatabase<typeof schema>,
     text: string,
-    projectId: string,
+    _projectId: string,
     threshold: number = 0.7,
     limit: number = 10
   ): Promise<SimilarContent[]> {
     const embedding = await this.embedText(text)
 
-    const [npcs, lore, quests] = await Promise.all([
-      this.findSimilarNPCs(db, embedding, projectId, threshold, limit),
-      this.findSimilarLore(db, embedding, projectId, threshold, limit),
-      this.findSimilarQuests(db, embedding, projectId, threshold, limit),
-    ])
+    // Search across all content types
+    const results = await qdrantService.search({
+      contentType: undefined, // Search all collections
+      queryVector: embedding,
+      limit,
+      threshold,
+      filter: undefined,
+    })
 
-    const all = [...npcs, ...lore, ...quests]
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit)
-
-    return all
+    return results.map(result => ({
+      id: result.payload.contentId,
+      type: result.payload.contentType,
+      content: result.payload.sourceText,
+      similarity: result.score,
+      metadata: result.payload.metadata as Record<string, unknown> | undefined,
+    }))
   }
 }
 

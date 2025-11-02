@@ -195,6 +195,43 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       throw new Error('Failed to create NPC')
     }
 
+    // Auto-generate and store embedding for semantic search
+    try {
+      const embeddingText = [
+        npc.name,
+        npc.description,
+        npc.personality,
+        npc.backstory,
+        npc.title,
+        npc.race,
+        npc.class,
+        npc.faction,
+      ]
+        .filter(Boolean)
+        .join(' | ')
+
+      if (embeddingText) {
+        await embeddingsService.storeEmbedding({
+          contentType: 'npc',
+          contentId: npc.id,
+          text: embeddingText,
+          metadata: {
+            name: npc.name,
+            title: npc.title,
+            race: npc.race,
+            class: npc.class,
+            level: npc.level,
+            faction: npc.faction,
+            behavior: npc.behavior,
+            projectId: npc.projectId,
+          },
+        })
+      }
+    } catch (error) {
+      fastify.log.error({ error, npcId: npc.id }, 'Failed to store NPC embedding')
+      // Don't fail the request if embedding fails
+    }
+
     reply.code(201).send({ npc: serializeAllTimestamps(npc) })
   })
 

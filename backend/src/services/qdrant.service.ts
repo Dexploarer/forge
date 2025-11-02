@@ -83,13 +83,22 @@ export class QdrantService {
     }
 
     // Initialize Qdrant client
-    this.client = new QdrantClient({
+    // For HTTPS URLs (Railway public endpoint), specify port: 443 to override default 6333
+    const isHttps = qdrantUrl.startsWith('https://')
+    const clientConfig: { url: string; port?: number; apiKey: string } = {
       url: qdrantUrl,
       apiKey: env.QDRANT_API_KEY || '',
-    });
+    }
+
+    if (isHttps) {
+      clientConfig.port = 443
+    }
+
+    this.client = new QdrantClient(clientConfig);
 
     console.log('[QdrantService] Initialized', {
       url: qdrantUrl,
+      port: isHttps ? 443 : 'default',
       vectorSize: this.vectorSize,
       distance: this.distance,
     });
