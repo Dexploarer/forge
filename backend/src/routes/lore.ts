@@ -532,7 +532,7 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['lore'],
       body: z.object({
         prompt: z.string().min(1),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         category: z.string().max(100).optional(),
         era: z.string().max(255).optional(),
         region: z.string().max(255).optional(),
@@ -555,9 +555,9 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   }, async (request, reply) => {
-    const { prompt, projectId, category, era, region, useContext, contextLimit } = request.body as {
+    const { prompt, projectId: providedProjectId, category, era, region, useContext, contextLimit } = request.body as {
       prompt: string
-      projectId: string
+      projectId?: string
       category?: string
       era?: string
       region?: string
@@ -565,14 +565,20 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
       contextLimit: number
     }
 
-    await verifyProjectMembership(fastify, projectId, request)
+    // Use provided projectId or create a temporary context-less generation
+    const projectId = providedProjectId || null
+
+    // Only verify project membership if projectId is provided
+    if (projectId) {
+      await verifyProjectMembership(fastify, projectId, request)
+    }
 
     try {
       const aiService = new AISDKService({ db: fastify.db })
 
-      // Get context if requested
+      // Get context if requested and projectId is available
       let contextText = ''
-      if (useContext) {
+      if (useContext && projectId) {
         const similarContent = await embeddingsService.findSimilarLore(
           fastify.db,
           await aiService.generateEmbedding(prompt),

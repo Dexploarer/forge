@@ -402,7 +402,7 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['quests'],
       body: z.object({
         prompt: z.string().min(1),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         questType: z.enum(['main', 'side', 'daily', 'event']).default('side'),
         difficulty: z.enum(['easy', 'medium', 'hard', 'expert']).default('medium'),
         useContext: z.boolean().default(true),
@@ -431,23 +431,29 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   }, async (request, reply) => {
-    const { prompt, projectId, questType, difficulty, useContext, contextLimit } = request.body as {
+    const { prompt, projectId: providedProjectId, questType, difficulty, useContext, contextLimit } = request.body as {
       prompt: string
-      projectId: string
+      projectId?: string
       questType: string
       difficulty: string
       useContext: boolean
       contextLimit: number
     }
 
-    await verifyProjectMembership(fastify, projectId, request)
+    // Use provided projectId or allow context-less generation
+    const projectId = providedProjectId || null
+
+    // Only verify project membership if projectId is provided
+    if (projectId) {
+      await verifyProjectMembership(fastify, projectId, request)
+    }
 
     try {
       const aiService = new AISDKService({ db: fastify.db })
 
-      // Get context if requested
+      // Get context if requested and projectId is available
       let contextText = ''
-      if (useContext) {
+      if (useContext && projectId) {
         const [similarNPCs, similarLore] = await Promise.all([
           embeddingsService.findSimilarNPCs(
             fastify.db,

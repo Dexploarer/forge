@@ -541,7 +541,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['npcs'],
       body: z.object({
         prompt: z.string().min(1),
-        projectId: z.string().uuid(),
+        projectId: z.string().uuid().optional(),
         useContext: z.boolean().default(true),
         contextLimit: z.number().int().min(1).max(10).default(5),
       }),
@@ -569,21 +569,27 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   }, async (request, reply) => {
-    const { prompt, projectId, useContext, contextLimit } = request.body as {
+    const { prompt, projectId: providedProjectId, useContext, contextLimit } = request.body as {
       prompt: string
-      projectId: string
+      projectId?: string
       useContext: boolean
       contextLimit: number
     }
 
-    await verifyProjectMembership(fastify, projectId, request)
+    // Use provided projectId or create a temporary context-less generation
+    const projectId = providedProjectId || null
+
+    // Only verify project membership if projectId is provided
+    if (projectId) {
+      await verifyProjectMembership(fastify, projectId, request)
+    }
 
     try {
       const aiService = new AISDKService({ db: fastify.db })
 
-      // Get context if requested
+      // Get context if requested and projectId is available
       let contextText = ''
-      if (useContext) {
+      if (useContext && projectId) {
         const similarContent = await embeddingsService.findSimilar(
           fastify.db,
           prompt,
