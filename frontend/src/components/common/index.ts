@@ -2,6 +2,7 @@
  * Common Components Export
  */
 
+export * from './AudioPlayer'
 export * from './AvatarUpload'
 export * from './Badge'
 export * from './Button'

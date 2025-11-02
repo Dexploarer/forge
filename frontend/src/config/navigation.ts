@@ -113,6 +113,12 @@ export const navigationConfig: NavigationConfig = {
           icon: Music,
           path: '/music',
         },
+        {
+          id: 'sfx',
+          label: 'Sound Effects',
+          icon: Music,
+          path: '/sfx',
+        },
       ],
     },
     {

@@ -12,6 +12,7 @@ import QuestsPage from './pages/QuestsPage'
 import LorePage from './pages/LorePage'
 import VoicePage from './pages/VoicePage'
 import MusicPage from './pages/MusicPage'
+import SoundEffectsPage from './pages/SoundEffectsPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import AIUsagePage from './pages/AIUsagePage'
 import ActivityPage from './pages/ActivityPage'
@@ -72,6 +73,7 @@ function App() {
         {/* Voice & Audio */}
         <Route path="/voice" element={<VoicePage />} />
         <Route path="/music" element={<MusicPage />} />
+        <Route path="/sfx" element={<SoundEffectsPage />} />
 
         {/* Analytics */}
         <Route path="/analytics" element={<AnalyticsPage />} />
