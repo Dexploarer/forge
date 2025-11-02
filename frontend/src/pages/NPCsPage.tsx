@@ -26,7 +26,7 @@ interface NPC {
   personality: string
   faction: string | null
   voiceId: string | null
-  avatarUrl?: string | null
+  portraitUrl?: string | null
   modelUrl?: string | null
   isFeatured?: boolean
   isTemplate?: boolean
@@ -250,18 +250,18 @@ export default function NPCsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          avatarUrl: data.imageUrl,
+          portraitUrl: data.imageUrl,
         }),
       })
 
       if (updateResponse.ok) {
-        console.log('[NPCsPage] handleGenerateImage: NPC updated with new avatar')
+        console.log('[NPCsPage] handleGenerateImage: NPC updated with new portrait')
         // Refresh the NPC list
         await fetchNpcs()
         // Update the selected NPC
         setSelectedNpc({
           ...selectedNpc,
-          avatarUrl: data.imageUrl,
+          portraitUrl: data.imageUrl,
         })
       } else {
         console.error('[NPCsPage] handleGenerateImage: Failed to update NPC')
@@ -447,7 +447,7 @@ export default function NPCsPage() {
                         id={npc.id}
                         name={npc.name}
                         description={npc.personality}
-                        avatarUrl={npc.avatarUrl}
+                        avatarUrl={npc.portraitUrl}
                         badges={getNpcBadges(npc)}
                         tags={npc.tags?.slice(0, 3) || (npc.faction ? [npc.faction] : [])}
                         stats={{
@@ -503,7 +503,7 @@ export default function NPCsPage() {
                 id={npc.id}
                 name={npc.name}
                 description={npc.personality}
-                avatarUrl={npc.avatarUrl}
+                avatarUrl={npc.portraitUrl}
                 badges={getNpcBadges(npc)}
                 tags={npc.tags || (npc.faction ? [npc.faction] : [])}
                 stats={{
@@ -660,7 +660,7 @@ export default function NPCsPage() {
             id: selectedNpc.id,
             name: selectedNpc.name,
             type: 'npc',
-            avatarUrl: selectedNpc.avatarUrl,
+            avatarUrl: selectedNpc.portraitUrl,
             description: selectedNpc.personality,
             badges: getNpcBadges(selectedNpc),
             overview: renderOverviewTab(selectedNpc),

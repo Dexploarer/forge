@@ -241,10 +241,11 @@ export function DetailModal({
         </div>
       </div>
 
-      {/* Tabs Section */}
+      {/* Tabs Section and Content */}
       {availableTabs.length > 0 && (
-        <div className="p-6 border-b border-slate-700">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          {/* Tab Navigation */}
+          <div className="p-6 border-b border-slate-700">
             <TabsList className="w-full justify-start overflow-x-auto">
               {availableTabs.map((tab) => {
                 const Icon = tab.icon
@@ -256,20 +257,18 @@ export function DetailModal({
                 )
               })}
             </TabsList>
-          </Tabs>
-        </div>
-      )}
+          </div>
 
-      {/* Tab Content */}
-      <ModalBody className="max-h-[50vh] overflow-y-auto">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          {availableTabs.map((tab) => (
-            <TabsContent key={tab.id} value={tab.id} className="mt-0">
-              <div className="text-gray-300">{tab.content}</div>
-            </TabsContent>
-          ))}
+          {/* Tab Content */}
+          <ModalBody className="max-h-[50vh] overflow-y-auto">
+            {availableTabs.map((tab) => (
+              <TabsContent key={tab.id} value={tab.id} className="mt-0">
+                <div className="text-gray-300">{tab.content}</div>
+              </TabsContent>
+            ))}
+          </ModalBody>
         </Tabs>
-      </ModalBody>
+      )}
     </Modal>
   )
 }

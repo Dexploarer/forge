@@ -2,7 +2,7 @@ import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
 import { generateText } from 'ai'
-import { aiServiceCalls } from '../database/schema'
+import { aiServiceCalls, assets } from '../database/schema'
 import { ForbiddenError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
 import { checkRateLimit, recordUsage, getUsageStats } from '../helpers/rate-limiter'
@@ -10,6 +10,7 @@ import { calculateOpenAICost, calculateMeshyCost, formatCost } from '../helpers/
 import { openaiService } from '../services/openai.service'
 import { meshyService } from '../services/meshy.service'
 import { embeddingsService } from '../services/embeddings.service'
+import { minioStorageService } from '../services/minio.service'
 import { env } from '../config/env'
 
 const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
@@ -380,6 +381,7 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       response: {
         200: z.object({
           imageUrl: z.string(),
+          assetId: z.string().uuid().optional(),
           revisedPrompt: z.string().optional(),
           cost: z.number(),
           costFormatted: z.string(),
@@ -432,14 +434,68 @@ IMPORTANT: Return the image as a file, not as code or description.`
       fastify.log.info(`[Image Generation] Gemini response - text length: ${result.text?.length || 0}, files: ${result.files?.length || 0}`)
 
       // Extract image from result.files
+      let assetId: string | undefined
       if (result.files && result.files.length > 0) {
         const imageFile = result.files.find((f: any) => f.mediaType?.startsWith('image/'))
         if (imageFile) {
-          const base64Image = Buffer.from(imageFile.uint8Array).toString('base64')
+          const imageBuffer = Buffer.from(imageFile.uint8Array)
           const mimeType = imageFile.mediaType || 'image/png'
-          imageUrl = `data:${mimeType};base64,${base64Image}`
           revisedPrompt = result.text || undefined
           fastify.log.info('[Image Generation] Successfully extracted image from Gemini files')
+
+          // Try to upload to MinIO and create asset record
+          try {
+            if (minioStorageService.isAvailable()) {
+              // Upload to MinIO
+              const ext = mimeType.split('/')[1] || 'png'
+              const uploadResult = await minioStorageService.uploadFile(
+                imageBuffer,
+                mimeType,
+                `ai-generated-${Date.now()}.${ext}`
+              )
+
+              imageUrl = uploadResult.url
+              fastify.log.info('[Image Generation] Uploaded to MinIO', { url: imageUrl })
+
+              // Create asset record
+              const [asset] = await fastify.db.insert(assets).values({
+                ownerId: request.user!.id,
+                name: `AI Generated Image - ${prompt.substring(0, 50)}`,
+                description: `AI-generated image: ${prompt}`,
+                type: 'image',
+                status: 'published',
+                visibility: 'private',
+                fileUrl: imageUrl,
+                fileSize: imageBuffer.length,
+                mimeType,
+                prompt,
+                generationParams: {
+                  model: imageModel,
+                  size,
+                  quality,
+                  style,
+                  revisedPrompt,
+                },
+                metadata: {},
+                tags: ['ai-generated', 'gemini'],
+              }).returning()
+
+              if (asset) {
+                assetId = asset.id
+                fastify.log.info('[Image Generation] Created asset record', { assetId })
+              }
+            } else {
+              // Fallback to base64 if MinIO is not available
+              const base64Image = imageBuffer.toString('base64')
+              imageUrl = `data:${mimeType};base64,${base64Image}`
+              fastify.log.warn('[Image Generation] MinIO not available, using base64 fallback')
+            }
+          } catch (uploadError) {
+            // Log error but don't fail the request - fallback to base64
+            fastify.log.error('[Image Generation] Failed to upload to MinIO or create asset', uploadError)
+            const base64Image = imageBuffer.toString('base64')
+            imageUrl = `data:${mimeType};base64,${base64Image}`
+          }
         } else {
           fastify.log.warn('[Image Generation] Gemini returned files but no image file found', { fileTypes: result.files.map((f: any) => f.mediaType) })
           throw new Error('Gemini returned files but no image file was found')
@@ -459,7 +515,7 @@ IMPORTANT: Return the image as a file, not as code or description.`
         endpoint: '/images/generations',
         model: imageModel,
         requestData: { prompt, size, quality, style },
-        responseData: { imageGenerated: true, imageLength: imageUrl.length },
+        responseData: { imageGenerated: true, assetId },
         cost,
         durationMs: Date.now() - startTime,
         status: 'success',
@@ -467,6 +523,7 @@ IMPORTANT: Return the image as a file, not as code or description.`
 
       return {
         imageUrl,
+        assetId,
         revisedPrompt,
         cost,
         costFormatted: formatCost(cost),

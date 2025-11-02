@@ -148,7 +148,7 @@ export class OpenAIService {
   constructor(apiKey?: string) {
     this.apiKey = apiKey || env.OPENAI_API_KEY || ''
     if (!this.apiKey && env.NODE_ENV !== 'test') {
-      throw new Error('OpenAI API key is required')
+      console.warn('⚠️  OpenAI API key not configured - OpenAI features will be unavailable')
     }
 
     this.client = new OpenAI({
