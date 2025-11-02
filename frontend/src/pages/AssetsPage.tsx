@@ -3,21 +3,17 @@
  * Browse and manage 3D models, textures, audio files, and other game assets
  */
 
-import { Database, Grid, List, Upload, Search, File, Image, Music } from 'lucide-react'
+import { Database, Grid, List, Upload, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
   Button,
-  Badge,
   Input,
   Select,
 } from '../components/common'
+import { CharacterCard } from '../components/common/CharacterCard'
+import { DetailModal } from '../components/common/DetailModal'
 import { useApiFetch } from '../utils/api'
 
 interface Asset {
@@ -30,6 +26,9 @@ interface Asset {
   metadata: Record<string, any>
   createdAt: string
   updatedAt: string
+  isFeatured?: boolean
+  tags?: string[]
+  usageCount?: number
 }
 
 export default function AssetsPage() {
@@ -40,6 +39,8 @@ export default function AssetsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedType, setSelectedType] = useState('all')
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
 
   useEffect(() => {
     fetchAssets()
@@ -60,23 +61,6 @@ export default function AssetsPage() {
     }
   }
 
-  const getAssetIcon = (type: string) => {
-    switch (type.toLowerCase()) {
-      case 'model':
-      case '3d':
-        return <File size={20} className="text-blue-400" />
-      case 'texture':
-      case 'image':
-        return <Image size={20} className="text-green-400" />
-      case 'audio':
-      case 'music':
-      case 'sfx':
-        return <Music size={20} className="text-purple-400" />
-      default:
-        return <Database size={20} className="text-gray-400" />
-    }
-  }
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -85,6 +69,16 @@ export default function AssetsPage() {
     })
   }
 
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown'
+    const mb = bytes / (1024 * 1024)
+    return mb > 1 ? `${mb.toFixed(2)} MB` : `${(bytes / 1024).toFixed(2)} KB`
+  }
+
+  const handleAssetClick = (asset: Asset) => {
+    setSelectedAsset(asset)
+    setShowDetailModal(true)
+  }
 
   const filteredAssets = assets.filter((asset) => {
     const matchesSearch = !searchQuery || asset.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -199,84 +193,141 @@ export default function AssetsPage() {
             )}
           </Card>
         ) : (
-          <div
-            className={
-              viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
-                : 'space-y-4'
-            }
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredAssets.map((asset) => (
-              <Card key={asset.id} variant="hover" className="group">
-                {viewMode === 'grid' ? (
-                  <>
-                    {/* Grid View */}
-                    <div className="aspect-square bg-slate-900 rounded-t-lg overflow-hidden border-b border-slate-700">
-                      {asset.thumbnailUrl ? (
-                        <img
-                          src={asset.thumbnailUrl}
-                          alt={asset.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          {getAssetIcon(asset.type)}
-                        </div>
-                      )}
-                    </div>
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base truncate">{asset.name}</CardTitle>
-                        <Badge
-                          variant={asset.status === 'published' ? 'success' : 'secondary'}
-                          size="sm"
-                        >
-                          {asset.status}
-                        </Badge>
-                      </div>
-                      <CardDescription className="truncate">{asset.type}</CardDescription>
-                    </CardHeader>
-                    <CardFooter className="flex items-center justify-between text-xs">
-                      <span className="text-gray-500">{formatDate(asset.createdAt)}</span>
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </CardFooter>
-                  </>
-                ) : (
-                  <>
-                    {/* List View */}
-                    <CardContent className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-slate-900 rounded-lg flex items-center justify-center shrink-0">
-                        {asset.thumbnailUrl ? (
-                          <img
-                            src={asset.thumbnailUrl}
-                            alt={asset.name}
-                            className="w-full h-full object-cover rounded-lg"
-                          />
-                        ) : (
-                          getAssetIcon(asset.type)
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="text-white font-medium truncate">{asset.name}</h3>
-                        <p className="text-sm text-gray-400">{asset.type}</p>
-                      </div>
-                      <Badge variant={asset.status === 'published' ? 'success' : 'secondary'}>
-                        {asset.status}
-                      </Badge>
-                      <span className="text-sm text-gray-500">{formatDate(asset.createdAt)}</span>
-                      <Button variant="ghost" size="sm">
-                        View
-                      </Button>
-                    </CardContent>
-                  </>
-                )}
-              </Card>
+              <CharacterCard
+                key={asset.id}
+                id={asset.id}
+                name={asset.name}
+                description={`${asset.type} asset${asset.metadata?.fileSize ? ` - ${formatFileSize(asset.metadata.fileSize)}` : ''}`}
+                avatarUrl={asset.thumbnailUrl}
+                badges={[
+                  ...(asset.isFeatured ? ['featured' as const] : []),
+                  asset.status === 'published' ? 'published' as const : 'draft' as const,
+                ]}
+                tags={[
+                  asset.type,
+                  ...(asset.metadata?.format ? [asset.metadata.format.toUpperCase()] : []),
+                  ...(asset.tags || []),
+                ].slice(0, 3)}
+                stats={{
+                  usageCount: asset.usageCount,
+                }}
+                onClick={() => handleAssetClick(asset)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Detail Modal */}
+      {selectedAsset && (
+        <DetailModal
+          open={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          entity={{
+            id: selectedAsset.id,
+            name: selectedAsset.name,
+            type: 'asset',
+            avatarUrl: selectedAsset.thumbnailUrl,
+            description: `${selectedAsset.type} asset`,
+            badges: [
+              ...(selectedAsset.isFeatured ? ['featured' as const] : []),
+              selectedAsset.status === 'published' ? 'published' as const : 'draft' as const,
+            ],
+            overview: (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">Asset Details</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-400">Type</p>
+                      <p className="text-white font-medium">{selectedAsset.type}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Status</p>
+                      <p className="text-white font-medium capitalize">{selectedAsset.status}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">File Size</p>
+                      <p className="text-white font-medium">
+                        {formatFileSize(selectedAsset.metadata?.fileSize)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Format</p>
+                      <p className="text-white font-medium">
+                        {selectedAsset.metadata?.format?.toUpperCase() || 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                {selectedAsset.metadata?.dimensions && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Dimensions</h3>
+                    <p className="text-gray-300">
+                      {selectedAsset.metadata.dimensions.width} x{' '}
+                      {selectedAsset.metadata.dimensions.height}
+                      {selectedAsset.metadata.dimensions.depth &&
+                        ` x ${selectedAsset.metadata.dimensions.depth}`}
+                    </p>
+                  </div>
+                )}
+                {selectedAsset.metadata?.duration && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Duration</h3>
+                    <p className="text-gray-300">{selectedAsset.metadata.duration}s</p>
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">Dates</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-400">Created</p>
+                      <p className="text-white">{formatDate(selectedAsset.createdAt)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-400">Updated</p>
+                      <p className="text-white">{formatDate(selectedAsset.updatedAt)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ),
+            technical: (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">Usage Statistics</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-400">Times Used</p>
+                      <p className="text-white font-medium text-2xl">
+                        {selectedAsset.usageCount || 0}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">
+                    Related Content (Coming Soon)
+                  </h3>
+                  <p className="text-gray-400 text-sm">
+                    View NPCs, quests, and locations that use this asset
+                  </p>
+                </div>
+                {selectedAsset.metadata && Object.keys(selectedAsset.metadata).length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Metadata</h3>
+                    <pre className="bg-slate-900 p-4 rounded-lg text-xs text-gray-300 overflow-x-auto">
+                      {JSON.stringify(selectedAsset.metadata, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            ),
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }

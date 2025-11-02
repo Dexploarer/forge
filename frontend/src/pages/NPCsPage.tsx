@@ -3,15 +3,11 @@
  * Create and manage non-player characters
  */
 
-import { Users, Plus, Search, Grid, List } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Users, Plus, Search, Grid, List, Star } from 'lucide-react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
   Button,
   Badge,
   Input,
@@ -21,6 +17,7 @@ import {
   ModalBody,
   ModalFooter,
 } from '../components/common'
+import { CharacterCard, DetailModal } from '../components/common'
 import { useApiFetch } from '../utils/api'
 
 interface NPC {
@@ -29,7 +26,17 @@ interface NPC {
   personality: string
   faction: string | null
   voiceId: string | null
+  avatarUrl?: string | null
+  modelUrl?: string | null
+  isFeatured?: boolean
+  isTemplate?: boolean
+  usageCount?: number
+  relatedLore?: string[]
+  quests?: string[]
+  locations?: string[]
+  tags?: string[]
   createdAt: string
+  updatedAt?: string
 }
 
 export default function NPCsPage() {
@@ -47,6 +54,8 @@ export default function NPCsPage() {
     faction: '',
     voiceId: '',
   })
+  const [selectedNpc, setSelectedNpc] = useState<NPC | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
 
   useEffect(() => {
     fetchNpcs()
@@ -111,6 +120,90 @@ export default function NPCsPage() {
   const getFactionCount = (faction: string) => {
     if (faction === 'all') return npcs.length
     return npcs.filter((npc) => npc.faction === faction).length
+  }
+
+  const featuredNpcs = npcs.filter((npc) => npc.isFeatured)
+
+  const handleViewNpc = (npc: NPC) => {
+    setSelectedNpc(npc)
+    setShowDetailModal(true)
+  }
+
+  const handleCloneNpc = (npc: NPC) => {
+    // Placeholder for clone functionality
+    console.log('Clone NPC:', npc.name)
+    // TODO: Implement clone logic
+  }
+
+  const getNpcBadges = (npc: NPC): Array<'featured' | 'template' | 'published' | 'draft'> => {
+    const badges: Array<'featured' | 'template' | 'published' | 'draft'> = []
+    if (npc.isFeatured) badges.push('featured')
+    if (npc.isTemplate) badges.push('template')
+    badges.push('published') // Default for now
+    return badges
+  }
+
+  const renderOverviewTab = (npc: NPC): ReactNode => {
+    return (
+      <div className="space-y-6">
+        {/* Personality */}
+        <div>
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+            Personality
+          </h3>
+          <p className="text-gray-300 leading-relaxed">{npc.personality}</p>
+        </div>
+
+        {/* Faction */}
+        {npc.faction && (
+          <div>
+            <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+              Faction
+            </h3>
+            <Badge variant="primary" size="md">
+              {npc.faction}
+            </Badge>
+          </div>
+        )}
+
+        {/* Voice */}
+        {npc.voiceId && (
+          <div>
+            <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+              Voice Settings
+            </h3>
+            <p className="text-gray-300">Voice ID: <span className="text-blue-400 font-mono">{npc.voiceId}</span></p>
+          </div>
+        )}
+
+        {/* Dates */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-700">
+          <div>
+            <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+              Created
+            </h4>
+            <p className="text-gray-300">{new Date(npc.createdAt).toLocaleString()}</p>
+          </div>
+          {npc.updatedAt && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                Last Updated
+              </h4>
+              <p className="text-gray-300">{new Date(npc.updatedAt).toLocaleString()}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const renderPlaceholderTab = (title: string): ReactNode => {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-400 mb-2">{title} content coming soon...</p>
+        <p className="text-gray-500 text-sm">This feature is under development</p>
+      </div>
+    )
   }
 
   return (
@@ -197,6 +290,40 @@ export default function NPCsPage() {
           </div>
         </Card>
 
+        {/* Featured NPCs Section */}
+        {featuredNpcs.length > 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Star size={20} className="text-yellow-400" />
+              <h2 className="text-xl font-bold text-white">Featured NPCs</h2>
+              <Badge variant="secondary">{featuredNpcs.length}</Badge>
+            </div>
+            <div className="relative">
+              <div className="overflow-x-auto pb-4 -mx-2 px-2">
+                <div className="flex gap-4 min-w-min">
+                  {featuredNpcs.map((npc) => (
+                    <div key={npc.id} className="w-[300px] flex-shrink-0">
+                      <CharacterCard
+                        id={npc.id}
+                        name={npc.name}
+                        description={npc.personality}
+                        avatarUrl={npc.avatarUrl}
+                        badges={getNpcBadges(npc)}
+                        tags={npc.tags?.slice(0, 3) || (npc.faction ? [npc.faction] : [])}
+                        stats={{
+                          usageCount: npc.usageCount,
+                        }}
+                        onClick={() => handleViewNpc(npc)}
+                        onClone={() => handleCloneNpc(npc)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* NPCs Grid/List */}
         {isLoading ? (
           <div className="text-center py-12">
@@ -227,31 +354,24 @@ export default function NPCsPage() {
             className={
               viewMode === 'grid'
                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
-                : 'space-y-4'
+                : 'grid grid-cols-1 gap-4'
             }
           >
             {filteredNpcs.map((npc) => (
-              <Card key={npc.id} variant="hover">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <CardTitle>{npc.name}</CardTitle>
-                    {npc.faction && <Badge variant="secondary">{npc.faction}</Badge>}
-                  </div>
-                  <CardDescription className="line-clamp-3">{npc.personality}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {npc.voiceId && (
-                      <div className="text-sm text-gray-400">
-                        Voice: <span className="text-gray-300">{npc.voiceId}</span>
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-500">
-                      Created: {new Date(npc.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <CharacterCard
+                key={npc.id}
+                id={npc.id}
+                name={npc.name}
+                description={npc.personality}
+                avatarUrl={npc.avatarUrl}
+                badges={getNpcBadges(npc)}
+                tags={npc.tags || (npc.faction ? [npc.faction] : [])}
+                stats={{
+                  usageCount: npc.usageCount,
+                }}
+                onClick={() => handleViewNpc(npc)}
+                onClone={() => handleCloneNpc(npc)}
+              />
             ))}
           </div>
         )}
@@ -321,6 +441,100 @@ export default function NPCsPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Detail Modal */}
+      {selectedNpc && (
+        <DetailModal
+          open={showDetailModal}
+          onClose={() => {
+            setShowDetailModal(false)
+            setSelectedNpc(null)
+          }}
+          entity={{
+            id: selectedNpc.id,
+            name: selectedNpc.name,
+            type: 'npc',
+            avatarUrl: selectedNpc.avatarUrl,
+            description: selectedNpc.personality,
+            badges: getNpcBadges(selectedNpc),
+            overview: renderOverviewTab(selectedNpc),
+            assets: selectedNpc.modelUrl ? (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+                    3D Model
+                  </h3>
+                  <p className="text-gray-300 break-all">{selectedNpc.modelUrl}</p>
+                </div>
+              </div>
+            ) : (
+              renderPlaceholderTab('Assets')
+            ),
+            lore: selectedNpc.relatedLore && selectedNpc.relatedLore.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+                  Related Lore
+                </h3>
+                <ul className="space-y-2">
+                  {selectedNpc.relatedLore.map((lore, index) => (
+                    <li key={index} className="text-gray-300 flex items-start gap-2">
+                      <span className="text-blue-400 mt-1">•</span>
+                      <span>{lore}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              renderPlaceholderTab('Lore')
+            ),
+            quests: selectedNpc.quests && selectedNpc.quests.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+                  Associated Quests
+                </h3>
+                <ul className="space-y-2">
+                  {selectedNpc.quests.map((quest, index) => (
+                    <li key={index} className="text-gray-300 flex items-start gap-2">
+                      <span className="text-blue-400 mt-1">•</span>
+                      <span>{quest}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              renderPlaceholderTab('Quests')
+            ),
+            locations: selectedNpc.locations && selectedNpc.locations.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+                  Locations
+                </h3>
+                <ul className="space-y-2">
+                  {selectedNpc.locations.map((location, index) => (
+                    <li key={index} className="text-gray-300 flex items-start gap-2">
+                      <span className="text-blue-400 mt-1">•</span>
+                      <span>{location}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              renderPlaceholderTab('Locations')
+            ),
+          }}
+          onEdit={() => {
+            // TODO: Implement edit functionality
+            console.log('Edit NPC:', selectedNpc.name)
+          }}
+          onDelete={() => {
+            // TODO: Implement delete functionality
+            console.log('Delete NPC:', selectedNpc.name)
+          }}
+          onClone={() => {
+            handleCloneNpc(selectedNpc)
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }

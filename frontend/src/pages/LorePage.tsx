@@ -8,10 +8,6 @@ import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
   Button,
   Badge,
   Input,
@@ -21,6 +17,8 @@ import {
   ModalBody,
   ModalFooter,
 } from '../components/common'
+import { CharacterCard } from '../components/common/CharacterCard'
+import { DetailModal } from '../components/common/DetailModal'
 import { useApiFetch } from '../utils/api'
 
 interface LoreEntry {
@@ -30,6 +28,11 @@ interface LoreEntry {
   category: 'history' | 'faction' | 'character' | 'location' | 'artifact' | 'event'
   tags: string[]
   createdAt: string
+  updatedAt?: string
+  isFeatured?: boolean
+  relatedNpcs?: string[]
+  relatedQuests?: string[]
+  relatedLocations?: string[]
 }
 
 export default function LorePage() {
@@ -40,6 +43,8 @@ export default function LorePage() {
   const [selectedCategory, setSelectedCategory] = useState<LoreEntry['category'] | 'all'>('all')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [selectedLore, setSelectedLore] = useState<LoreEntry | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
   const [newLore, setNewLore] = useState({
     title: '',
     content: '',
@@ -129,6 +134,19 @@ export default function LorePage() {
   const getCategoryCount = (category: LoreEntry['category'] | 'all') => {
     if (category === 'all') return lore.length
     return lore.filter((entry) => entry.category === category).length
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
+  const handleLoreClick = (entry: LoreEntry) => {
+    setSelectedLore(entry)
+    setShowDetailModal(true)
   }
 
   return (
@@ -223,37 +241,141 @@ export default function LorePage() {
             )}
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredLore.map((entry) => (
-              <Card key={entry.id} variant="hover">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <CardTitle>{entry.title}</CardTitle>
-                    <Badge variant="secondary">{entry.category}</Badge>
-                  </div>
-                  <CardDescription className="whitespace-pre-line">{entry.content}</CardDescription>
-                </CardHeader>
-                {entry.tags && entry.tags.length > 0 && (
-                  <CardContent className="pt-0">
-                    <div className="flex flex-wrap gap-2">
-                      {entry.tags.map((tag, idx) => (
-                        <Badge key={idx} variant="secondary" size="sm">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                )}
-                <CardContent className="pt-0">
-                  <div className="text-xs text-gray-500">
-                    Created: {new Date(entry.createdAt).toLocaleDateString()}
-                  </div>
-                </CardContent>
-              </Card>
+              <CharacterCard
+                key={entry.id}
+                id={entry.id}
+                name={entry.title}
+                description={entry.content.substring(0, 150) + (entry.content.length > 150 ? '...' : '')}
+                avatarUrl={null}
+                badges={[
+                  ...(entry.isFeatured ? ['featured' as const] : []),
+                ]}
+                tags={[
+                  entry.category,
+                  ...(entry.tags || []),
+                ].slice(0, 3)}
+                onClick={() => handleLoreClick(entry)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {/* Detail Modal */}
+      {selectedLore && (
+        <DetailModal
+          open={showDetailModal}
+          onClose={() => setShowDetailModal(false)}
+          entity={{
+            id: selectedLore.id,
+            name: selectedLore.title,
+            type: 'lore',
+            avatarUrl: null,
+            description: selectedLore.content.substring(0, 200) + (selectedLore.content.length > 200 ? '...' : ''),
+            badges: [
+              ...(selectedLore.isFeatured ? ['featured' as const] : []),
+            ],
+            overview: (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">Category</h3>
+                  <Badge variant="secondary" size="md">{selectedLore.category}</Badge>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">Content</h3>
+                  <p className="text-gray-300 whitespace-pre-line leading-relaxed">
+                    {selectedLore.content}
+                  </p>
+                </div>
+                {selectedLore.tags && selectedLore.tags.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3">Tags</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedLore.tags.map((tag, idx) => (
+                        <Badge key={idx} variant="secondary" size="md">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3">Dates</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-400">Created</p>
+                      <p className="text-white">{formatDate(selectedLore.createdAt)}</p>
+                    </div>
+                    {selectedLore.updatedAt && (
+                      <div>
+                        <p className="text-sm text-gray-400">Updated</p>
+                        <p className="text-white">{formatDate(selectedLore.updatedAt)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ),
+            assets: (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white">Related NPCs</h3>
+                {selectedLore.relatedNpcs && selectedLore.relatedNpcs.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedLore.relatedNpcs.map((npc, idx) => (
+                      <div key={idx} className="p-3 bg-slate-800 rounded-lg border border-slate-700">
+                        <p className="text-gray-300">{npc}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">
+                    No NPCs are currently associated with this lore entry. This feature will automatically track NPCs that reference this lore.
+                  </p>
+                )}
+              </div>
+            ),
+            quests: (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white">Related Quests</h3>
+                {selectedLore.relatedQuests && selectedLore.relatedQuests.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedLore.relatedQuests.map((quest, idx) => (
+                      <div key={idx} className="p-3 bg-slate-800 rounded-lg border border-slate-700">
+                        <p className="text-gray-300">{quest}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">
+                    No quests are currently associated with this lore entry. This feature will automatically track quests that reference this lore.
+                  </p>
+                )}
+              </div>
+            ),
+            locations: (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white">Related Locations</h3>
+                {selectedLore.relatedLocations && selectedLore.relatedLocations.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedLore.relatedLocations.map((location, idx) => (
+                      <div key={idx} className="p-3 bg-slate-800 rounded-lg border border-slate-700">
+                        <p className="text-gray-300">{location}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">
+                    No locations are currently mentioned in this lore entry. This feature will automatically track locations referenced in the content.
+                  </p>
+                )}
+              </div>
+            ),
+          }}
+        />
+      )}
+
 
       {/* Create Lore Modal */}
       <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} size="lg">

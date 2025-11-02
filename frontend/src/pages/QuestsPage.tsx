@@ -3,15 +3,11 @@
  * Create and manage game quests
  */
 
-import { Target, Plus, Search, Grid, List } from 'lucide-react'
+import { Target, Plus, Search, Grid, List, CheckCircle, Users, MapPin, Scroll, Award } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
   Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
   Button,
   Badge,
   Input,
@@ -20,6 +16,8 @@ import {
   ModalHeader,
   ModalBody,
   ModalFooter,
+  CharacterCard,
+  DetailModal,
 } from '../components/common'
 import { useApiFetch } from '../utils/api'
 
@@ -30,7 +28,16 @@ interface Quest {
   objectives: string[]
   rewards: string
   status: 'active' | 'completed' | 'draft'
+  avatarUrl?: string | null // Quest giver portrait
+  questGiver?: string // NPC name
+  participants?: string[] // NPC names involved
+  locations?: string[] // Where quest takes place
+  relatedLore?: string[] // Lore entry IDs
+  difficulty?: 'easy' | 'medium' | 'hard' | 'epic'
+  isFeatured?: boolean
+  tags?: string[]
   createdAt: string
+  updatedAt?: string
 }
 
 export default function QuestsPage() {
@@ -42,6 +49,8 @@ export default function QuestsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [selectedQuest, setSelectedQuest] = useState<Quest | null>(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
   const [newQuest, setNewQuest] = useState({
     title: '',
     description: '',
@@ -131,6 +140,54 @@ export default function QuestsPage() {
       default:
         return 'secondary'
     }
+  }
+
+  const getQuestBadges = (quest: Quest): Array<'featured' | 'draft'> => {
+    const badges: Array<'featured' | 'draft'> = []
+    if (quest.isFeatured) badges.push('featured')
+    if (quest.status === 'draft') badges.push('draft')
+    return badges
+  }
+
+  const getQuestTags = (quest: Quest): string[] => {
+    const tags: string[] = []
+
+    // Add custom tags
+    if (quest.tags) tags.push(...quest.tags)
+
+    // Add difficulty
+    if (quest.difficulty) {
+      tags.push(quest.difficulty.charAt(0).toUpperCase() + quest.difficulty.slice(1))
+    }
+
+    // Add location if available
+    if (quest.locations && quest.locations.length > 0) {
+      tags.push(quest.locations[0])
+    }
+
+    return tags
+  }
+
+  const getDifficultyBadge = (difficulty?: string): { label: string; variant: 'success' | 'warning' | 'secondary' | 'error' } | null => {
+    if (!difficulty) return null
+
+    switch (difficulty) {
+      case 'easy':
+        return { label: 'Easy', variant: 'success' }
+      case 'medium':
+        return { label: 'Medium', variant: 'warning' }
+      case 'hard':
+        return { label: 'Hard', variant: 'secondary' }
+      case 'epic':
+        return { label: 'Epic', variant: 'error' }
+      default:
+        return null
+    }
+  }
+
+  const handleQuestClick = (quest: Quest) => {
+    setSelectedQuest(quest)
+    setShowDetailModal(true)
   }
 
   return (
@@ -249,32 +306,17 @@ export default function QuestsPage() {
             }
           >
             {filteredQuests.map((quest) => (
-              <Card key={quest.id} variant="hover">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <CardTitle>{quest.title}</CardTitle>
-                    <Badge variant={getStatusVariant(quest.status)}>
-                      {quest.status.charAt(0).toUpperCase() + quest.status.slice(1)}
-                    </Badge>
-                  </div>
-                  <CardDescription className="line-clamp-2">{quest.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <div className="text-sm text-gray-400">
-                      Objectives: <span className="text-gray-300">{quest.objectives.length}</span>
-                    </div>
-                    {quest.rewards && (
-                      <div className="text-sm text-gray-400">
-                        Rewards: <span className="text-gray-300">{quest.rewards}</span>
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-500">
-                      Created: {new Date(quest.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <CharacterCard
+                key={quest.id}
+                id={quest.id}
+                name={quest.title}
+                description={quest.description}
+                avatarUrl={quest.avatarUrl}
+                handle={quest.questGiver ? `@${quest.questGiver}` : undefined}
+                badges={getQuestBadges(quest)}
+                tags={getQuestTags(quest)}
+                onClick={() => handleQuestClick(quest)}
+              />
             ))}
           </div>
         )}
@@ -346,6 +388,186 @@ export default function QuestsPage() {
           </Button>
         </ModalFooter>
       </Modal>
+
+      {/* Quest Detail Modal */}
+      {selectedQuest && (
+        <DetailModal
+          open={showDetailModal}
+          onClose={() => {
+            setShowDetailModal(false)
+            setSelectedQuest(null)
+          }}
+          entity={{
+            id: selectedQuest.id,
+            name: selectedQuest.title,
+            type: 'quest',
+            avatarUrl: selectedQuest.avatarUrl,
+            description: selectedQuest.description,
+            badges: getQuestBadges(selectedQuest),
+            overview: (
+              <div className="space-y-6">
+                {/* Status and Difficulty */}
+                <div className="flex flex-wrap gap-3">
+                  <Badge variant={getStatusVariant(selectedQuest.status)} size="md">
+                    <CheckCircle size={14} className="mr-1.5" />
+                    {selectedQuest.status.charAt(0).toUpperCase() + selectedQuest.status.slice(1)}
+                  </Badge>
+                  {selectedQuest.difficulty && (
+                    <Badge variant={getDifficultyBadge(selectedQuest.difficulty)?.variant || 'secondary'} size="md">
+                      <Target size={14} className="mr-1.5" />
+                      {getDifficultyBadge(selectedQuest.difficulty)?.label}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Quest Giver */}
+                {selectedQuest.questGiver && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                      <Users size={18} />
+                      Quest Giver
+                    </h3>
+                    <p className="text-gray-300">{selectedQuest.questGiver}</p>
+                  </div>
+                )}
+
+                {/* Objectives */}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                    <CheckCircle size={18} />
+                    Objectives
+                  </h3>
+                  <ul className="space-y-2">
+                    {selectedQuest.objectives.map((objective, index) => (
+                      <li key={index} className="flex items-start gap-3 text-gray-300">
+                        <span className="text-blue-400 font-semibold mt-0.5">{index + 1}.</span>
+                        <span>{objective}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Rewards */}
+                {selectedQuest.rewards && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+                      <Award size={18} />
+                      Rewards
+                    </h3>
+                    <p className="text-gray-300">{selectedQuest.rewards}</p>
+                  </div>
+                )}
+
+                {/* Metadata */}
+                <div className="border-t border-slate-700 pt-4 space-y-1 text-sm">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Created:</span>
+                    <span className="text-gray-300">
+                      {new Date(selectedQuest.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {selectedQuest.updatedAt && (
+                    <div className="flex justify-between text-gray-400">
+                      <span>Updated:</span>
+                      <span className="text-gray-300">
+                        {new Date(selectedQuest.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ),
+            quests: selectedQuest.participants && selectedQuest.participants.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                  <Users size={18} />
+                  NPCs Involved
+                </h3>
+                {selectedQuest.questGiver && (
+                  <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <Users size={20} className="text-purple-400" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-white">{selectedQuest.questGiver}</div>
+                        <div className="text-sm text-gray-400">Quest Giver</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {selectedQuest.participants.map((participant, index) => (
+                  <div key={index} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                        <Users size={20} className="text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-white">{participant}</div>
+                        <div className="text-sm text-gray-400">Participant</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <Users size={48} className="mx-auto mb-3 opacity-30" />
+                <p>No NPC participants defined for this quest.</p>
+              </div>
+            ),
+            locations: selectedQuest.locations && selectedQuest.locations.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                  <MapPin size={18} />
+                  Quest Locations
+                </h3>
+                <div className="grid gap-3">
+                  {selectedQuest.locations.map((location, index) => (
+                    <div key={index} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                      <div className="flex items-center gap-3">
+                        <MapPin size={20} className="text-green-400" />
+                        <span className="text-white font-medium">{location}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <MapPin size={48} className="mx-auto mb-3 opacity-30" />
+                <p>No locations defined for this quest.</p>
+              </div>
+            ),
+            lore: selectedQuest.relatedLore && selectedQuest.relatedLore.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                  <Scroll size={18} />
+                  Related Lore
+                </h3>
+                <div className="grid gap-3">
+                  {selectedQuest.relatedLore.map((loreId, index) => (
+                    <div key={index} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                      <div className="flex items-center gap-3">
+                        <Scroll size={20} className="text-amber-400" />
+                        <span className="text-white font-medium">Lore Entry: {loreId}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-400 italic">
+                  Click on a lore entry to view its full content.
+                </p>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <Scroll size={48} className="mx-auto mb-3 opacity-30" />
+                <p>No related lore entries for this quest.</p>
+              </div>
+            ),
+          }}
+        />
+      )}
     </DashboardLayout>
   )
 }
