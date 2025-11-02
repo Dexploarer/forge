@@ -12,8 +12,6 @@
  */
 
 import { generateText, gateway, embed } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
-import { createAnthropic } from '@ai-sdk/anthropic'
 import { eq, and } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { modelConfigurations } from '../database/schema'
@@ -247,20 +245,9 @@ export class AISDKService {
       return `${provider}/${cleanModelId}`
     }
 
-    // Direct provider access (no gateway)
-    if (provider === 'openai') {
-      const openaiProvider = this.openaiApiKey
-        ? createOpenAI({ apiKey: this.openaiApiKey })
-        : createOpenAI()
-      return openaiProvider(modelId.replace('openai/', ''))
-    } else if (provider === 'anthropic') {
-      const anthropicProvider = this.anthropicApiKey
-        ? createAnthropic({ apiKey: this.anthropicApiKey })
-        : createAnthropic()
-      return anthropicProvider(modelId.replace('anthropic/', ''))
-    }
-
-    throw new Error(`Unsupported provider: ${provider}`)
+    // Direct provider access not supported without gateway
+    // If we reach here, AI_GATEWAY_API_KEY is not set
+    throw new Error(`AI Gateway is required. Please set AI_GATEWAY_API_KEY environment variable.`)
   }
 
   /**

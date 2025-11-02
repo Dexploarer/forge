@@ -11,7 +11,6 @@
  */
 
 import { embed, embedMany, gateway } from 'ai'
-import { openai } from '@ai-sdk/openai'
 import { qdrantService, type ContentType, CONTENT_TYPES } from './qdrant.service'
 
 const EMBEDDING_MODEL = 'text-embedding-3-small'
@@ -97,15 +96,15 @@ export class ContentEmbedderService {
   /**
    * Get the embedding model (gateway or direct)
    */
-  private getModel(modelId: string = EMBEDDING_MODEL): ReturnType<typeof openai.embedding> {
+  private getModel(modelId: string = EMBEDDING_MODEL): any {
     if (this.useGateway) {
       const gatewayModelId = modelId.includes('/') ? modelId : `openai/${modelId}`
       // Use gateway.textEmbeddingModel for embedding models
       return gateway.textEmbeddingModel(gatewayModelId)
     }
 
-    // Direct OpenAI access
-    return openai.embedding(modelId.replace('openai/', ''))
+    // Direct access not supported without gateway
+    throw new Error('AI Gateway is required. Please set AI_GATEWAY_API_KEY environment variable.')
   }
 
   // =============================================================================
