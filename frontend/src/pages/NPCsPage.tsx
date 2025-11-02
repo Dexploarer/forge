@@ -245,7 +245,7 @@ export default function NPCsPage() {
 
       // Update NPC with the generated image
       const updateResponse = await apiFetch(`/api/npcs/${selectedNpc.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },

@@ -332,7 +332,7 @@ export default function LorePage() {
 
       // Update lore with the generated image
       const updateResponse = await apiFetch(`/api/lore/${selectedLore.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },

@@ -436,7 +436,7 @@ export default function QuestsPage() {
 
       // Update quest with the generated image
       const updateResponse = await apiFetch(`/api/quests/${selectedQuest.id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
         },
