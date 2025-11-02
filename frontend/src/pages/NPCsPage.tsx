@@ -225,6 +225,9 @@ export default function NPCsPage() {
           quality: 'standard',
           style: 'vivid',
           model: 'google/gemini-2.5-flash-image-preview', // Google Gemini multimodal image generation
+          entityType: 'npc',
+          entityId: selectedNpc.id,
+          entityName: selectedNpc.name,
         }),
       })
 

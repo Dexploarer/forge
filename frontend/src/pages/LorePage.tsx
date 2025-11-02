@@ -312,6 +312,9 @@ export default function LorePage() {
           quality: 'standard',
           style: 'vivid',
           model: 'google/gemini-2.5-flash-image-preview', // Google Gemini multimodal image generation
+          entityType: 'lore',
+          entityId: selectedLore.id,
+          entityName: selectedLore.title,
         }),
       })
 

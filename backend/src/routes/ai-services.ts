@@ -377,6 +377,9 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
           'google/gemini-2.5-flash-image-preview',
           'google/gemini-2.5-flash-image',
         ]).default('google/gemini-2.5-flash-image-preview'),
+        entityType: z.enum(['npc', 'quest', 'lore', 'asset']).optional(),
+        entityId: z.string().uuid().optional(),
+        entityName: z.string().optional(),
       }),
       response: {
         200: z.object({
@@ -389,12 +392,15 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
   }, async (request) => {
-    const { prompt, size, quality, style, model: imageModel } = request.body as {
+    const { prompt, size, quality, style, model: imageModel, entityType, entityId, entityName } = request.body as {
       prompt: string
       size: '256x256' | '512x512' | '1024x1024' | '1024x1792' | '1792x1024'
       quality: 'standard' | 'hd'
       style: 'vivid' | 'natural'
       model: string
+      entityType?: 'npc' | 'quest' | 'lore' | 'asset'
+      entityId?: string
+      entityName?: string
     }
 
     // Check rate limits
@@ -457,10 +463,29 @@ IMPORTANT: Return the image as a file, not as code or description.`
               imageUrl = uploadResult.url
               fastify.log.info('[Image Generation] Uploaded to MinIO', { url: imageUrl })
 
-              // Create asset record
+              // Create asset record with entity linkage
+              const assetTags = ['ai-generated', 'gemini']
+              const assetMetadata: Record<string, any> = {}
+
+              if (entityType) {
+                assetTags.push(entityType)
+                assetMetadata.entityType = entityType
+              }
+              if (entityId) {
+                assetMetadata.entityId = entityId
+              }
+              if (entityName) {
+                assetTags.push(entityName)
+                assetMetadata.entityName = entityName
+              }
+
+              const assetName = entityName
+                ? `${entityName} Portrait`
+                : `AI Generated Image - ${prompt.substring(0, 50)}`
+
               const [asset] = await fastify.db.insert(assets).values({
                 ownerId: request.user!.id,
-                name: `AI Generated Image - ${prompt.substring(0, 50)}`,
+                name: assetName,
                 description: `AI-generated image: ${prompt}`,
                 type: 'image',
                 status: 'published',
@@ -476,8 +501,8 @@ IMPORTANT: Return the image as a file, not as code or description.`
                   style,
                   revisedPrompt,
                 },
-                metadata: {},
-                tags: ['ai-generated', 'gemini'],
+                metadata: assetMetadata,
+                tags: assetTags,
               }).returning()
 
               if (asset) {

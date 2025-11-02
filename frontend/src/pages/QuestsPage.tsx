@@ -416,6 +416,9 @@ export default function QuestsPage() {
           quality: 'standard',
           style: 'vivid',
           model: 'google/gemini-2.5-flash-image-preview', // Google Gemini multimodal image generation
+          entityType: 'quest',
+          entityId: selectedQuest.id,
+          entityName: selectedQuest.name,
         }),
       })
 
