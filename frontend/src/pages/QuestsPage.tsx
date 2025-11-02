@@ -75,6 +75,7 @@ export default function QuestsPage() {
   const [showAiGenerate, setShowAiGenerate] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
 
   const statuses: Array<{ value: Quest['status'] | 'all'; label: string }> = [
     { value: 'all', label: 'All' },
@@ -380,6 +381,86 @@ export default function QuestsPage() {
   const handleQuestClick = (quest: Quest) => {
     setSelectedQuest(quest)
     setShowDetailModal(true)
+  }
+
+  const handleGenerateImage = async () => {
+    if (!selectedQuest) return
+
+    setIsGeneratingImage(true)
+    try {
+      // Construct prompt from quest context
+      const promptParts = [
+        `Fantasy game quest illustration for "${selectedQuest.name}"`,
+        selectedQuest.description.substring(0, 200), // Limit description length
+      ]
+      if (selectedQuest.questType) {
+        promptParts.push(`quest type: ${selectedQuest.questType}`)
+      }
+      const prompt = promptParts.join(', ')
+
+      console.log('[QuestsPage] handleGenerateImage: Generating image', {
+        questId: selectedQuest.id,
+        questName: selectedQuest.name,
+        promptLength: prompt.length,
+      })
+
+      // Call image generation endpoint
+      const response = await apiFetch('/api/ai-services/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          size: '1024x1024',
+          quality: 'standard',
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('[QuestsPage] handleGenerateImage: Failed', error)
+        alert('Failed to generate image. Please try again.')
+        return
+      }
+
+      const data = await response.json()
+      console.log('[QuestsPage] handleGenerateImage: Image generated', {
+        imageUrl: data.imageUrl,
+        tokensUsed: data.tokensUsed,
+        cost: data.cost,
+      })
+
+      // Update quest with the generated image
+      const updateResponse = await apiFetch(`/api/quests/${selectedQuest.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          avatarUrl: data.imageUrl,
+        }),
+      })
+
+      if (updateResponse.ok) {
+        console.log('[QuestsPage] handleGenerateImage: Quest updated with new avatar')
+        // Refresh the quest list
+        await fetchQuests()
+        // Update the selected quest
+        setSelectedQuest({
+          ...selectedQuest,
+          avatarUrl: data.imageUrl,
+        })
+      } else {
+        console.error('[QuestsPage] handleGenerateImage: Failed to update quest')
+        alert('Image generated but failed to save to quest. Please try again.')
+      }
+    } catch (error) {
+      console.error('[QuestsPage] handleGenerateImage: Error', error)
+      alert('Failed to generate image. Please try again.')
+    } finally {
+      setIsGeneratingImage(false)
+    }
   }
 
   return (
@@ -842,6 +923,8 @@ export default function QuestsPage() {
               </div>
             ),
           }}
+          onGenerateImage={handleGenerateImage}
+          isGeneratingImage={isGeneratingImage}
         />
       )}
     </DashboardLayout>

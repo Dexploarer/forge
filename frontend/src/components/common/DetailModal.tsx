@@ -4,7 +4,7 @@
  */
 
 import { useState, type ReactNode } from 'react'
-import { Edit2, Trash2, Copy, Share2, User, Scroll, Database, MapPin } from 'lucide-react'
+import { Edit2, Trash2, Copy, Share2, User, Scroll, Database, MapPin, Sparkles } from 'lucide-react'
 import { Modal, ModalBody } from './Modal'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './Tabs'
 import { Button } from './Button'
@@ -33,6 +33,8 @@ export interface DetailModalProps {
   onDelete?: () => void
   onClone?: () => void
   onShare?: () => void
+  onGenerateImage?: () => Promise<void>
+  isGeneratingImage?: boolean
 }
 
 const entityTypeConfig = {
@@ -69,6 +71,8 @@ export function DetailModal({
   onDelete,
   onClone,
   onShare,
+  onGenerateImage,
+  isGeneratingImage = false,
 }: DetailModalProps) {
   // Determine available tabs
   const availableTabs = [
@@ -116,17 +120,35 @@ export function DetailModal({
           <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
             {/* Avatar */}
             <div className="flex-shrink-0">
-              <div className="w-40 h-40 rounded-full bg-slate-800 border-2 border-slate-700 overflow-hidden shadow-xl">
-                {entity.avatarUrl ? (
-                  <img
-                    src={entity.avatarUrl}
-                    alt={entity.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-500">
-                    <User size={64} />
-                  </div>
+              <div className="relative">
+                <div className="w-40 h-40 rounded-full bg-slate-800 border-2 border-slate-700 overflow-hidden shadow-xl">
+                  {entity.avatarUrl ? (
+                    <img
+                      src={entity.avatarUrl}
+                      alt={entity.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
+                      <User size={64} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Generate Image Button - shown when no avatar */}
+                {!entity.avatarUrl && onGenerateImage && (
+                  <button
+                    onClick={onGenerateImage}
+                    disabled={isGeneratingImage}
+                    className="absolute bottom-0 right-0 p-2 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white shadow-lg transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                    title="Generate AI Image"
+                  >
+                    {isGeneratingImage ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Sparkles size={20} />
+                    )}
+                  </button>
                 )}
               </div>
             </div>

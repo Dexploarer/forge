@@ -59,6 +59,7 @@ export default function NPCsPage() {
   const [showAiGenerate, setShowAiGenerate] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
 
   useEffect(() => {
     fetchNpcs()
@@ -189,6 +190,86 @@ export default function NPCsPage() {
     // Placeholder for clone functionality
     console.log('Clone NPC:', npc.name)
     // TODO: Implement clone logic
+  }
+
+  const handleGenerateImage = async () => {
+    if (!selectedNpc) return
+
+    setIsGeneratingImage(true)
+    try {
+      // Construct prompt from NPC context
+      const promptParts = [
+        `Portrait of ${selectedNpc.name}`,
+        selectedNpc.personality,
+      ]
+      if (selectedNpc.faction) {
+        promptParts.push(`from the ${selectedNpc.faction} faction`)
+      }
+      const prompt = promptParts.join(', ')
+
+      console.log('[NPCsPage] handleGenerateImage: Generating image', {
+        npcId: selectedNpc.id,
+        npcName: selectedNpc.name,
+        promptLength: prompt.length,
+      })
+
+      // Call image generation endpoint
+      const response = await apiFetch('/api/ai-services/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          size: '1024x1024',
+          quality: 'standard',
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('[NPCsPage] handleGenerateImage: Failed', error)
+        alert('Failed to generate image. Please try again.')
+        return
+      }
+
+      const data = await response.json()
+      console.log('[NPCsPage] handleGenerateImage: Image generated', {
+        imageUrl: data.imageUrl,
+        tokensUsed: data.tokensUsed,
+        cost: data.cost,
+      })
+
+      // Update NPC with the generated image
+      const updateResponse = await apiFetch(`/api/npcs/${selectedNpc.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          avatarUrl: data.imageUrl,
+        }),
+      })
+
+      if (updateResponse.ok) {
+        console.log('[NPCsPage] handleGenerateImage: NPC updated with new avatar')
+        // Refresh the NPC list
+        await fetchNpcs()
+        // Update the selected NPC
+        setSelectedNpc({
+          ...selectedNpc,
+          avatarUrl: data.imageUrl,
+        })
+      } else {
+        console.error('[NPCsPage] handleGenerateImage: Failed to update NPC')
+        alert('Image generated but failed to save to NPC. Please try again.')
+      }
+    } catch (error) {
+      console.error('[NPCsPage] handleGenerateImage: Error', error)
+      alert('Failed to generate image. Please try again.')
+    } finally {
+      setIsGeneratingImage(false)
+    }
   }
 
   const getNpcBadges = (npc: NPC): Array<'featured' | 'template' | 'published' | 'draft'> => {
@@ -655,6 +736,8 @@ export default function NPCsPage() {
           onClone={() => {
             handleCloneNpc(selectedNpc)
           }}
+          onGenerateImage={handleGenerateImage}
+          isGeneratingImage={isGeneratingImage}
         />
       )}
     </DashboardLayout>

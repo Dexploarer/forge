@@ -54,6 +54,7 @@ export default function LorePage() {
   const [showAiGenerate, setShowAiGenerate] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
 
   const categories: Array<{ value: LoreEntry['category'] | 'all'; label: string }> = [
     { value: 'all', label: 'All' },
@@ -280,6 +281,85 @@ export default function LorePage() {
     setShowDetailModal(true)
   }
 
+  const handleGenerateImage = async () => {
+    if (!selectedLore) return
+
+    setIsGeneratingImage(true)
+    try {
+      // Construct prompt from lore context
+      const promptParts = [
+        `Fantasy lore illustration for "${selectedLore.title}"`,
+        selectedLore.content.substring(0, 200), // Limit content length
+        `category: ${selectedLore.category}`,
+      ]
+      const prompt = promptParts.join(', ')
+
+      console.log('[LorePage] handleGenerateImage: Generating image', {
+        loreId: selectedLore.id,
+        loreTitle: selectedLore.title,
+        promptLength: prompt.length,
+      })
+
+      // Call image generation endpoint
+      const response = await apiFetch('/api/ai-services/generate-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          size: '1024x1024',
+          quality: 'standard',
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('[LorePage] handleGenerateImage: Failed', error)
+        alert('Failed to generate image. Please try again.')
+        return
+      }
+
+      const data = await response.json()
+      console.log('[LorePage] handleGenerateImage: Image generated', {
+        imageUrl: data.imageUrl,
+        tokensUsed: data.tokensUsed,
+        cost: data.cost,
+      })
+
+      // Update lore with the generated image
+      const updateResponse = await apiFetch(`/api/lore/${selectedLore.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          avatarUrl: data.imageUrl,
+        }),
+      })
+
+      if (updateResponse.ok) {
+        console.log('[LorePage] handleGenerateImage: Lore updated with new avatar')
+        // Refresh the lore list
+        await fetchLore()
+        // Update the selected lore
+        setSelectedLore({
+          ...selectedLore,
+          // @ts-ignore - avatarUrl is not in the interface but backend supports it
+          avatarUrl: data.imageUrl,
+        })
+      } else {
+        console.error('[LorePage] handleGenerateImage: Failed to update lore')
+        alert('Image generated but failed to save to lore. Please try again.')
+      }
+    } catch (error) {
+      console.error('[LorePage] handleGenerateImage: Error', error)
+      alert('Failed to generate image. Please try again.')
+    } finally {
+      setIsGeneratingImage(false)
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -504,6 +584,8 @@ export default function LorePage() {
               </div>
             ),
           }}
+          onGenerateImage={handleGenerateImage}
+          isGeneratingImage={isGeneratingImage}
         />
       )}
 
