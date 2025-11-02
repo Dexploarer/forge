@@ -24,6 +24,49 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  // Bootstrap endpoint - make first admin (only works if no admins exist)
+  fastify.post('/bootstrap-admin', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Bootstrap first admin user (only works if no admins exist)',
+      summary: 'Bootstrap admin',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+    }
+  }, async (request, reply) => {
+    // Check if any admin users exist
+    const existingAdmin = await fastify.db.query.users.findFirst({
+      where: eq(users.role, 'admin')
+    })
+
+    if (existingAdmin) {
+      return reply.status(403).send({
+        error: 'Admin user already exists. This endpoint is disabled.'
+      })
+    }
+
+    // Promote current user to admin
+    const [updatedUser] = await fastify.db
+      .update(users)
+      .set({ role: 'admin', updatedAt: new Date() })
+      .where(eq(users.id, request.user!.id))
+      .returning()
+
+    fastify.log.warn({
+      userId: updatedUser.id,
+      walletAddress: updatedUser.walletAddress
+    }, 'Bootstrapped first admin user')
+
+    return {
+      success: true,
+      message: 'You are now an admin',
+      user: {
+        id: updatedUser.id,
+        role: updatedUser.role
+      }
+    }
+  })
+
   // Middleware to check admin role
   const requireAdmin = async (request: any) => {
     fastify.log.info({
