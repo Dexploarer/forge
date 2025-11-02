@@ -311,7 +311,7 @@ export default function LorePage() {
           size: '1024x1024',
           quality: 'standard',
           style: 'vivid',
-          model: 'openai/gpt-5-nano', // Cost-effective AI Gateway model
+          model: 'google/gemini-2.5-flash-image-preview', // Google Gemini multimodal image generation
         }),
       })
 

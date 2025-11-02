@@ -1,7 +1,8 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { eq, and, gte, lte, desc, sql } from 'drizzle-orm'
-import { generateText, gateway } from 'ai'
+import { generateText } from 'ai'
+import { google } from '@ai-sdk/google'
 import { aiServiceCalls } from '../database/schema'
 import { ForbiddenError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -365,7 +366,7 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/generate-image', {
     preHandler: [fastify.authenticate],
     schema: {
-      description: 'Generate image using AI Gateway multimodal models (GPT-5 Nano or Gemini)',
+      description: 'Generate image using Google Gemini (multimodal image generation)',
       tags: ['ai-services'],
       body: z.object({
         prompt: z.string().min(1),
@@ -373,12 +374,9 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
         quality: z.enum(['standard', 'hd']).default('standard'),
         style: z.enum(['vivid', 'natural']).default('vivid'),
         model: z.enum([
-          'openai/gpt-5-nano',
-          'openai/gpt-5',
-          'openai/gpt-5-pro',
           'google/gemini-2.5-flash-image-preview',
           'google/gemini-2.5-flash-image',
-        ]).default('openai/gpt-5-nano'),
+        ]).default('google/gemini-2.5-flash-image-preview'),
       }),
       response: {
         200: z.object({
@@ -399,7 +397,7 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // Check rate limits
-    const rateLimitStatus = await checkRateLimit(fastify.db, request.user!.id, 'openai')
+    const rateLimitStatus = await checkRateLimit(fastify.db, request.user!.id, 'google')
     if (!rateLimitStatus.allowed) {
       throw new ForbiddenError(rateLimitStatus.reason || 'Rate limit exceeded')
     }
@@ -410,76 +408,56 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
       let imageUrl: string
       let revisedPrompt: string | undefined
 
-      // Use Vercel AI Gateway
-      if (env.AI_GATEWAY_API_KEY || env.VERCEL_ENV) {
-        fastify.log.info(`[Image Generation] Using AI Gateway with model: ${imageModel}`)
+      // Use Google Gemini for image generation
+      fastify.log.info(`[Image Generation] Using Google Gemini model: ${imageModel}`)
 
-        // Create explicit image generation prompt
-        const imagePrompt = `GENERATE AN IMAGE.
+      // Extract model name (remove 'google/' prefix)
+      const modelName = imageModel.replace('google/', '')
+
+      // Create detailed image generation prompt
+      const imagePrompt = `Create a ${quality} quality, ${style} style image for a game character/asset.
 
 Description: ${prompt}
 
-Image specifications:
-- Size: ${size}
-- Quality: ${quality}
-- Style: ${style}
+Requirements:
+- Generate an actual image file (not SVG code or text description)
+- Target size: ${size}
+- Art style: ${style === 'vivid' ? 'vibrant, bold colors with high contrast' : 'realistic, natural tones'}
+- Quality: ${quality === 'hd' ? 'high detail and resolution' : 'standard game asset quality'}
+- Purpose: Avatar/portrait for game development platform
 
-You MUST create and return an image file that matches this description. This is for a game development platform avatar/portrait.`
+IMPORTANT: Return the image as a file, not as code or description.`
 
-        const result = await generateText({
-          model: gateway(imageModel),
-          prompt: imagePrompt,
-        })
+      const result = await generateText({
+        model: google(modelName),
+        prompt: imagePrompt,
+      })
 
-        fastify.log.info(`[Image Generation] Response received - text: ${result.text?.substring(0, 100)}, files: ${result.files?.length || 0}`)
+      fastify.log.info(`[Image Generation] Gemini response - text length: ${result.text?.length || 0}, files: ${result.files?.length || 0}`)
 
-        // Try to extract image from result.files
-        if (result.files && result.files.length > 0) {
-          const imageFile = result.files.find((f: any) => f.mediaType?.startsWith('image/'))
-          if (imageFile) {
-            const base64Image = Buffer.from(imageFile.uint8Array).toString('base64')
-            const mimeType = imageFile.mediaType || 'image/png'
-            imageUrl = `data:${mimeType};base64,${base64Image}`
-            revisedPrompt = result.text || undefined
-            fastify.log.info('[Image Generation] Successfully extracted image from files')
-          } else {
-            throw new Error('Response contains files but no image file was found')
-          }
+      // Extract image from result.files
+      if (result.files && result.files.length > 0) {
+        const imageFile = result.files.find((f: any) => f.mediaType?.startsWith('image/'))
+        if (imageFile) {
+          const base64Image = Buffer.from(imageFile.uint8Array).toString('base64')
+          const mimeType = imageFile.mediaType || 'image/png'
+          imageUrl = `data:${mimeType};base64,${base64Image}`
+          revisedPrompt = result.text || undefined
+          fastify.log.info('[Image Generation] Successfully extracted image from Gemini files')
         } else {
-          throw new Error(`No image generated. Model responded with text only: ${result.text?.substring(0, 200)}`)
+          fastify.log.warn('[Image Generation] Gemini returned files but no image file found', { fileTypes: result.files.map((f: any) => f.mediaType) })
+          throw new Error('Gemini returned files but no image file was found')
         }
       } else {
-        // Fallback to direct OpenAI API
-        fastify.log.info('[Image Generation] Using direct OpenAI API (no AI Gateway key)')
-
-        const response = await openaiService.generateImage(prompt, {
-          size,
-          quality,
-          style,
-        })
-
-        imageUrl = response.url
-        revisedPrompt = response.revisedPrompt
+        fastify.log.error('[Image Generation] Gemini did not return any image files', { textResponse: result.text?.substring(0, 500) })
+        throw new Error(`Gemini did not generate an image file. Response: ${result.text?.substring(0, 200)}`)
       }
 
-      // Calculate cost based on model
-      // GPT-5 models use different pricing tiers
-      let cost: number
-      if (imageModel === 'openai/gpt-5-nano') {
-        cost = 0.05 / 1000000 * 1000 // $0.05 per 1M tokens, estimate 1000 tokens
-      } else if (imageModel === 'openai/gpt-5') {
-        cost = 1.25 / 1000000 * 1000 // $1.25 per 1M tokens
-      } else if (imageModel === 'openai/gpt-5-pro') {
-        cost = 15.00 / 1000000 * 1000 // $15.00 per 1M tokens
-      } else if (imageModel.startsWith('google/gemini')) {
-        cost = 0.30 / 1000000 * 1000 // $0.30 per 1M tokens
-      } else {
-        cost = calculateOpenAICost(1000, 'dall-e-3', 'output')
-      }
+      // Calculate cost - Gemini image models are $0.30 per 1M tokens
+      const cost = 0.30 / 1000000 * 1000 // Estimate 1000 tokens per image
 
       // Record usage
-      const provider = imageModel.startsWith('google/') ? 'google' : 'openai'
-      await recordUsage(fastify.db, request.user!.id, provider, {
+      await recordUsage(fastify.db, request.user!.id, 'google', {
         endpoint: '/images/generations',
         model: imageModel,
         requestData: { prompt, size, quality, style },
@@ -497,8 +475,7 @@ You MUST create and return an image file that matches this description. This is 
       }
     } catch (err) {
       // Record failed usage
-      const provider = imageModel.startsWith('google/') ? 'google' : 'openai'
-      await recordUsage(fastify.db, request.user!.id, provider, {
+      await recordUsage(fastify.db, request.user!.id, 'google', {
         endpoint: '/images/generations',
         model: imageModel,
         requestData: { prompt, size, quality, style },
