@@ -6,6 +6,8 @@ import { NotFoundError } from '../utils/errors'
 import { verifyProjectMembership } from '../helpers/project-access'
 import { serializeAllTimestamps } from '../helpers/serialization'
 import { buildTimeline, findRelatedContent } from '../helpers/lore-timeline'
+import { AISDKService } from '../services/ai-sdk.service'
+import { embeddingsService } from '../services/embeddings.service'
 
 const loreRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -518,6 +520,116 @@ const loreRoutes: FastifyPluginAsync = async (fastify) => {
     const related = await findRelatedContent(fastify, id, entry.projectId)
 
     return { related }
+  })
+
+  // =====================================================
+  // GENERATE LORE WITH AI
+  // =====================================================
+  fastify.post('/generate', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Generate lore entry using AI (Claude via AI Gateway)',
+      tags: ['lore'],
+      body: z.object({
+        prompt: z.string().min(1),
+        projectId: z.string().uuid(),
+        category: z.string().max(100).optional(),
+        era: z.string().max(255).optional(),
+        region: z.string().max(255).optional(),
+        useContext: z.boolean().default(true),
+        contextLimit: z.number().int().min(1).max(10).default(5),
+      }),
+      response: {
+        201: z.object({
+          lore: z.object({
+            title: z.string(),
+            content: z.string(),
+            summary: z.string(),
+            category: z.string().nullable(),
+            era: z.string().nullable(),
+            region: z.string().nullable(),
+            importanceLevel: z.number(),
+            tags: z.array(z.string()),
+          })
+        })
+      }
+    }
+  }, async (request, reply) => {
+    const { prompt, projectId, category, era, region, useContext, contextLimit } = request.body as {
+      prompt: string
+      projectId: string
+      category?: string
+      era?: string
+      region?: string
+      useContext: boolean
+      contextLimit: number
+    }
+
+    await verifyProjectMembership(fastify, projectId, request)
+
+    try {
+      const aiService = new AISDKService({ db: fastify.db })
+
+      // Get context if requested
+      let contextText = ''
+      if (useContext) {
+        const similarContent = await embeddingsService.findSimilarLore(
+          fastify.db,
+          await aiService.generateEmbedding(prompt),
+          projectId,
+          0.7,
+          contextLimit
+        )
+
+        if (similarContent.length > 0) {
+          contextText = '\n\nRelevant existing lore for continuity:\n'
+          similarContent.forEach((item) => {
+            contextText += `\n${item.content.substring(0, 300)}...\n`
+          })
+        }
+      }
+
+      // Build system prompt
+      const systemPrompt = `You are a game lore writer creating rich world-building content for an RPG game. Generate detailed lore based on the user's description.
+
+Return a JSON object with the following structure:
+{
+  "title": "Compelling Title",
+  "content": "Detailed lore content (3-5 paragraphs, rich in detail)",
+  "summary": "Brief 1-2 sentence summary",
+  "category": "${category || 'history'}",
+  "era": "${era || 'ancient'}",
+  "region": "${region || 'unknown'}",
+  "importanceLevel": 7,
+  "tags": ["tag1", "tag2", "tag3"]
+}
+
+Make the lore engaging, internally consistent${useContext ? ', and compatible with the existing lore provided' : ''}.${contextText}`
+
+      // Generate lore with Claude
+      const responseText = await aiService.generateWithClaude(
+        prompt,
+        systemPrompt,
+        {
+          taskType: 'lore-generation',
+          temperature: 0.75,
+          maxTokens: 2500,
+        }
+      )
+
+      // Parse JSON response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('Failed to parse AI response')
+      }
+
+      const generatedLore = JSON.parse(jsonMatch[0])
+
+      reply.code(201).send({ lore: generatedLore })
+    } catch (error) {
+      fastify.log.error({ error, prompt }, 'Lore generation failed')
+      throw new Error(`Lore generation failed: ${(error as Error).message}`)
+    }
   })
 }
 

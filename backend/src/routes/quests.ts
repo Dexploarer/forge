@@ -6,6 +6,8 @@ import { NotFoundError } from '../utils/errors'
 import { verifyProjectMembership } from '../helpers/project-access'
 import { serializeAllTimestamps } from '../helpers/serialization'
 import { getQuestChain } from '../helpers/quest-chain'
+import { AISDKService } from '../services/ai-sdk.service'
+import { embeddingsService } from '../services/embeddings.service'
 
 const questRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -388,6 +390,151 @@ const questRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     reply.code(201).send({ quest: serializeAllTimestamps(duplicate) })
+  })
+
+  // =====================================================
+  // GENERATE QUEST WITH AI
+  // =====================================================
+  fastify.post('/generate', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Generate quest using AI (Claude via AI Gateway)',
+      tags: ['quests'],
+      body: z.object({
+        prompt: z.string().min(1),
+        projectId: z.string().uuid(),
+        questType: z.enum(['main', 'side', 'daily', 'event']).default('side'),
+        difficulty: z.enum(['easy', 'medium', 'hard', 'expert']).default('medium'),
+        useContext: z.boolean().default(true),
+        contextLimit: z.number().int().min(1).max(10).default(5),
+      }),
+      response: {
+        201: z.object({
+          quest: z.object({
+            name: z.string(),
+            description: z.string(),
+            questType: z.string(),
+            difficulty: z.string(),
+            minLevel: z.number(),
+            objectives: z.array(z.any()),
+            rewards: z.any(),
+            requirements: z.any(),
+            startDialog: z.string().nullable(),
+            completeDialog: z.string().nullable(),
+            location: z.string().nullable(),
+            relatedNpcs: z.array(z.string()),
+            estimatedDuration: z.number().nullable(),
+            repeatable: z.boolean(),
+            tags: z.array(z.string()),
+          })
+        })
+      }
+    }
+  }, async (request, reply) => {
+    const { prompt, projectId, questType, difficulty, useContext, contextLimit } = request.body as {
+      prompt: string
+      projectId: string
+      questType: string
+      difficulty: string
+      useContext: boolean
+      contextLimit: number
+    }
+
+    await verifyProjectMembership(fastify, projectId, request)
+
+    try {
+      const aiService = new AISDKService({ db: fastify.db })
+
+      // Get context if requested
+      let contextText = ''
+      if (useContext) {
+        const [similarNPCs, similarLore] = await Promise.all([
+          embeddingsService.findSimilarNPCs(
+            fastify.db,
+            await aiService.generateEmbedding(prompt),
+            projectId,
+            0.7,
+            contextLimit
+          ),
+          embeddingsService.findSimilarLore(
+            fastify.db,
+            await aiService.generateEmbedding(prompt),
+            projectId,
+            0.7,
+            contextLimit
+          )
+        ])
+
+        if (similarNPCs.length > 0 || similarLore.length > 0) {
+          contextText = '\n\nRelevant NPCs and lore for quest integration:\n'
+          similarNPCs.forEach((npc) => {
+            contextText += `\n[NPC] ${npc.content.substring(0, 150)}...\n`
+          })
+          similarLore.forEach((lore) => {
+            contextText += `\n[LORE] ${lore.content.substring(0, 150)}...\n`
+          })
+        }
+      }
+
+      // Build system prompt
+      const systemPrompt = `You are a game quest designer creating engaging quests for an RPG game. Generate a complete quest based on the user's description.
+
+Return a JSON object with the following structure:
+{
+  "name": "Quest Title",
+  "description": "Quest description explaining the story and goals",
+  "questType": "${questType}",
+  "difficulty": "${difficulty}",
+  "minLevel": 10,
+  "objectives": [
+    {"id": "obj1", "type": "kill", "description": "Defeat 5 bandits", "target": "bandit", "count": 5, "completed": false}
+  ],
+  "rewards": {
+    "experience": 1000,
+    "gold": 500,
+    "items": [{"id": "sword1", "name": "Steel Sword", "quantity": 1}],
+    "reputation": {"faction1": 10}
+  },
+  "requirements": {
+    "level": 5,
+    "previousQuests": [],
+    "items": []
+  },
+  "startDialog": "Quest introduction dialogue",
+  "completeDialog": "Quest completion dialogue",
+  "location": "Quest location",
+  "relatedNpcs": [],
+  "estimatedDuration": 30,
+  "repeatable": false,
+  "tags": ["tag1", "tag2"]
+}
+
+Make the quest engaging, balanced, and appropriate for the difficulty level${useContext ? '. Integrate with provided NPCs and lore when relevant' : ''}.${contextText}`
+
+      // Generate quest with Claude
+      const responseText = await aiService.generateWithClaude(
+        prompt,
+        systemPrompt,
+        {
+          taskType: 'quest-generation',
+          temperature: 0.8,
+          maxTokens: 2000,
+        }
+      )
+
+      // Parse JSON response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('Failed to parse AI response')
+      }
+
+      const generatedQuest = JSON.parse(jsonMatch[0])
+
+      reply.code(201).send({ quest: generatedQuest })
+    } catch (error) {
+      fastify.log.error({ error, prompt }, 'Quest generation failed')
+      throw new Error(`Quest generation failed: ${(error as Error).message}`)
+    }
   })
 }
 

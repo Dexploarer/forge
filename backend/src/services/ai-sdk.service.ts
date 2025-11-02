@@ -11,7 +11,7 @@
  * - Per-user API keys
  */
 
-import { generateText, gateway } from 'ai'
+import { generateText, gateway, embed } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { eq, and } from 'drizzle-orm'
@@ -481,6 +481,59 @@ export class AISDKService {
     } as any)
 
     return text
+  }
+
+  /**
+   * Generate embedding using AI Gateway
+   * Uses text-embedding-3-small by default
+   */
+  async generateEmbedding(
+    text: string,
+    options: {
+      model?: string
+    } = {}
+  ): Promise<number[]> {
+    if (!this.useGateway && !env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY or AI_GATEWAY_API_KEY required for embeddings')
+    }
+
+    const modelId = options.model || 'text-embedding-3-small'
+
+    try {
+      // When using AI Gateway, the embed function will automatically route through gateway
+      const embeddingModel = this.useGateway && env.AI_GATEWAY_API_KEY
+        ? `openai/${modelId}`
+        : this.getModel(modelId, 'openai')
+
+      const { embedding } = await embed({
+        model: embeddingModel,
+        value: text,
+      } as any)
+
+      return embedding
+    } catch (error) {
+      console.error('[AISDKService] Embedding generation failed:', error)
+      throw new Error(`Embedding generation failed: ${(error as Error).message}`)
+    }
+  }
+
+  /**
+   * Generate embeddings for multiple texts (batch)
+   */
+  async generateEmbeddings(
+    texts: string[],
+    options: {
+      model?: string
+    } = {}
+  ): Promise<number[][]> {
+    const embeddings: number[][] = []
+
+    for (const text of texts) {
+      const embedding = await this.generateEmbedding(text, options)
+      embeddings.push(embedding)
+    }
+
+    return embeddings
   }
 }
 

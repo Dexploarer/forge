@@ -1,4 +1,4 @@
-import { openaiService } from './openai.service'
+import { aiSDKService } from './ai-sdk.service'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { sql } from 'drizzle-orm'
 import * as schema from '../database/schema'
@@ -19,24 +19,18 @@ export class EmbeddingsService {
   private model = 'text-embedding-3-small'
 
   /**
-   * Generate embedding for text
+   * Generate embedding for text using AI Gateway
    */
   async embedText(text: string): Promise<number[]> {
-    const response = await openaiService.generateEmbeddings(text, this.model)
-    return response.embedding
+    const embedding = await aiSDKService.generateEmbedding(text, { model: this.model })
+    return embedding
   }
 
   /**
-   * Generate embeddings for multiple texts
+   * Generate embeddings for multiple texts using AI Gateway
    */
   async embedBatch(texts: string[]): Promise<number[][]> {
-    const embeddings: number[][] = []
-
-    for (const text of texts) {
-      const embedding = await this.embedText(text)
-      embeddings.push(embedding)
-    }
-
+    const embeddings = await aiSDKService.generateEmbeddings(texts, { model: this.model })
     return embeddings
   }
 

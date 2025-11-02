@@ -6,6 +6,8 @@ import { NotFoundError } from '../utils/errors'
 import { verifyProjectMembership } from '../helpers/project-access'
 import { serializeAllTimestamps } from '../helpers/serialization'
 import { generateNPCStats, generateLootTable, generateBasicDialog } from '../helpers/npc-generator'
+import { AISDKService } from '../services/ai-sdk.service'
+import { embeddingsService } from '../services/embeddings.service'
 
 const npcRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -527,6 +529,136 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
     const dialog = generateBasicDialog(name, behavior)
 
     return { dialog }
+  })
+
+  // =====================================================
+  // GENERATE NPC WITH AI
+  // =====================================================
+  fastify.post('/generate', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Generate complete NPC using AI (Claude via AI Gateway)',
+      tags: ['npcs'],
+      body: z.object({
+        prompt: z.string().min(1),
+        projectId: z.string().uuid(),
+        useContext: z.boolean().default(true),
+        contextLimit: z.number().int().min(1).max(10).default(5),
+      }),
+      response: {
+        201: z.object({
+          npc: z.object({
+            name: z.string(),
+            description: z.string().nullable(),
+            personality: z.string().nullable(),
+            backstory: z.string().nullable(),
+            race: z.string().nullable(),
+            class: z.string().nullable(),
+            level: z.number(),
+            behavior: z.string(),
+            dialogLines: z.array(z.any()),
+            appearance: z.record(z.string(), z.any()),
+            health: z.number(),
+            armor: z.number(),
+            damage: z.number(),
+            abilities: z.array(z.any()),
+            lootTable: z.array(z.any()),
+            tags: z.array(z.string()),
+          })
+        })
+      }
+    }
+  }, async (request, reply) => {
+    const { prompt, projectId, useContext, contextLimit } = request.body as {
+      prompt: string
+      projectId: string
+      useContext: boolean
+      contextLimit: number
+    }
+
+    await verifyProjectMembership(fastify, projectId, request)
+
+    try {
+      const aiService = new AISDKService({ db: fastify.db })
+
+      // Get context if requested
+      let contextText = ''
+      if (useContext) {
+        const similarContent = await embeddingsService.findSimilar(
+          fastify.db,
+          prompt,
+          projectId,
+          0.7,
+          contextLimit
+        )
+
+        if (similarContent.length > 0) {
+          contextText = '\n\nRelevant context from existing game content:\n'
+          similarContent.forEach((item) => {
+            contextText += `\n[${item.type.toUpperCase()}] ${item.content.substring(0, 200)}...\n`
+          })
+        }
+      }
+
+      // Build system prompt
+      const systemPrompt = `You are a game design AI that creates detailed NPC characters for RPG games. Generate a complete NPC based on the user's description.
+
+Return a JSON object with the following structure:
+{
+  "name": "NPC Name",
+  "description": "Brief description (1-2 sentences)",
+  "personality": "Detailed personality traits and demeanor",
+  "backstory": "Character background and history",
+  "race": "Character race/species",
+  "class": "Character class/profession",
+  "level": 10,
+  "behavior": "friendly" | "neutral" | "hostile" | "merchant",
+  "dialogLines": [
+    {"id": "greeting", "text": "Hello traveler!", "condition": null},
+    {"id": "farewell", "text": "Safe travels!", "condition": null}
+  ],
+  "appearance": {
+    "physicalTraits": "Description of physical appearance",
+    "clothing": "Description of clothing and equipment"
+  },
+  "health": 100,
+  "armor": 50,
+  "damage": 20,
+  "abilities": [
+    {"name": "Ability Name", "description": "What it does", "cooldown": 10}
+  ],
+  "lootTable": [
+    {"itemName": "Item", "dropChance": 0.5, "quantity": [1, 3]}
+  ],
+  "tags": ["tag1", "tag2"]
+}
+
+Make the NPC interesting, balanced, and appropriate for an RPG game.${contextText}`
+
+      // Generate NPC with Claude
+      const responseText = await aiService.generateWithClaude(
+        prompt,
+        systemPrompt,
+        {
+          taskType: 'npc-generation',
+          temperature: 0.8,
+          maxTokens: 2000,
+        }
+      )
+
+      // Parse JSON response
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        throw new Error('Failed to parse AI response')
+      }
+
+      const generatedNpc = JSON.parse(jsonMatch[0])
+
+      reply.code(201).send({ npc: generatedNpc })
+    } catch (error) {
+      fastify.log.error({ error, prompt }, 'NPC generation failed')
+      throw new Error(`NPC generation failed: ${(error as Error).message}`)
+    }
   })
 }
 
