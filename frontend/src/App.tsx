@@ -5,8 +5,21 @@ import AdminPage from './pages/AdminPage'
 import UsersPage from './pages/UsersPage'
 import ProjectsPage from './pages/ProjectsPage'
 import AssetsPage from './pages/AssetsPage'
+import ThreeDModelsPage from './pages/3DModelsPage'
+import AudioAssetsPage from './pages/AudioAssetsPage'
+import NPCsPage from './pages/NPCsPage'
+import QuestsPage from './pages/QuestsPage'
 import LorePage from './pages/LorePage'
+import VoicePage from './pages/VoicePage'
+import MusicPage from './pages/MusicPage'
+import AnalyticsPage from './pages/AnalyticsPage'
+import AIUsagePage from './pages/AIUsagePage'
+import ActivityPage from './pages/ActivityPage'
 import SettingsPage from './pages/SettingsPage'
+import SystemSettingsPage from './pages/SystemSettingsPage'
+import SystemLogsPage from './pages/SystemLogsPage'
+import ProfilePage from './pages/ProfilePage'
+import HelpPage from './pages/HelpPage'
 
 function App() {
   const [authenticated, setAuthenticated] = useState(false)
@@ -45,9 +58,37 @@ function App() {
         <Route path="/dashboard" element={<AdminPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
+
+        {/* Assets */}
         <Route path="/assets" element={<AssetsPage />} />
-        <Route path="/lore" element={<LorePage />} />
+        <Route path="/assets/3d" element={<ThreeDModelsPage />} />
+        <Route path="/assets/audio" element={<AudioAssetsPage />} />
+
+        {/* Game Content */}
+        <Route path="/content/npcs" element={<NPCsPage />} />
+        <Route path="/content/quests" element={<QuestsPage />} />
+        <Route path="/content/lore" element={<LorePage />} />
+
+        {/* Voice & Audio */}
+        <Route path="/voice" element={<VoicePage />} />
+        <Route path="/music" element={<MusicPage />} />
+
+        {/* Analytics */}
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/analytics/ai" element={<AIUsagePage />} />
+
+        {/* Activity */}
+        <Route path="/activity" element={<ActivityPage />} />
+
+        {/* Admin */}
+        <Route path="/admin/settings" element={<SystemSettingsPage />} />
+        <Route path="/admin/logs" element={<SystemLogsPage />} />
+
+        {/* User */}
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/help" element={<HelpPage />} />
+
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </BrowserRouter>

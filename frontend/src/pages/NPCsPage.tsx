@@ -1,0 +1,326 @@
+/**
+ * NPCs Page
+ * Create and manage non-player characters
+ */
+
+import { Users, Plus, Search, Grid, List } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { DashboardLayout } from '../components/dashboard/DashboardLayout'
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  Button,
+  Badge,
+  Input,
+  Textarea,
+  Modal,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+} from '../components/common'
+import { useApiFetch } from '../utils/api'
+
+interface NPC {
+  id: string
+  name: string
+  personality: string
+  faction: string | null
+  voiceId: string | null
+  createdAt: string
+}
+
+export default function NPCsPage() {
+  const apiFetch = useApiFetch()
+  const [npcs, setNpcs] = useState<NPC[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedFaction, setSelectedFaction] = useState<string>('all')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [newNpc, setNewNpc] = useState({
+    name: '',
+    personality: '',
+    faction: '',
+    voiceId: '',
+  })
+
+  useEffect(() => {
+    fetchNpcs()
+  }, [])
+
+  const fetchNpcs = async () => {
+    try {
+      setIsLoading(true)
+      const response = await apiFetch('/api/npcs')
+      if (response.ok) {
+        const data = await response.json()
+        setNpcs(data.npcs || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch NPCs:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateNpc = async () => {
+    if (!newNpc.name.trim() || !newNpc.personality.trim()) return
+
+    setIsCreating(true)
+    try {
+      const response = await apiFetch('/api/npcs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newNpc.name,
+          personality: newNpc.personality,
+          faction: newNpc.faction || null,
+          voiceId: newNpc.voiceId || null,
+        }),
+      })
+
+      if (response.ok) {
+        await fetchNpcs()
+        setShowCreateModal(false)
+        setNewNpc({ name: '', personality: '', faction: '', voiceId: '' })
+      }
+    } catch (error) {
+      console.error('Failed to create NPC:', error)
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const filteredNpcs = npcs.filter((npc) => {
+    const matchesFaction = selectedFaction === 'all' || npc.faction === selectedFaction
+    const matchesSearch =
+      !searchQuery ||
+      npc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      npc.personality.toLowerCase().includes(searchQuery.toLowerCase())
+    return matchesFaction && matchesSearch
+  })
+
+  const factions = ['all', ...Array.from(new Set(npcs.map((n) => n.faction).filter((f): f is string => f !== null)))]
+
+  const getFactionCount = (faction: string) => {
+    if (faction === 'all') return npcs.length
+    return npcs.filter((npc) => npc.faction === faction).length
+  }
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl backdrop-blur-sm p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                <Users size={28} className="text-purple-400" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-white">NPCs</h1>
+                <p className="text-gray-400 mt-1">
+                  Create and manage non-player characters
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`px-3 py-1.5 rounded transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <Grid size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-3 py-1.5 rounded transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  <List size={16} />
+                </button>
+              </div>
+              <Badge variant="secondary">{npcs.length} NPCs</Badge>
+              <Button variant="primary" onClick={() => setShowCreateModal(true)} className="gap-2">
+                <Plus size={18} />
+                Create NPC
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Faction Filters */}
+        {factions.length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {factions.map((faction) => (
+              <button
+                key={faction}
+                onClick={() => setSelectedFaction(faction)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  selectedFaction === faction
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-800 text-gray-300 border border-slate-700 hover:border-blue-500'
+                }`}
+              >
+                {faction === 'all' ? 'All' : faction}
+                {getFactionCount(faction) > 0 && (
+                  <span className="ml-2 opacity-70">({getFactionCount(faction)})</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Search */}
+        <Card className="p-4">
+          <div className="relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search NPCs by name or personality..."
+              className="pl-10"
+            />
+          </div>
+        </Card>
+
+        {/* NPCs Grid/List */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <p className="text-gray-400">Loading NPCs...</p>
+          </div>
+        ) : filteredNpcs.length === 0 ? (
+          <Card className="p-12 text-center">
+            <Users size={48} className="text-gray-600 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">
+              {npcs.length === 0 ? 'No NPCs Yet' : 'No Matching NPCs'}
+            </h3>
+            <p className="text-gray-400 mb-4">
+              {npcs.length === 0
+                ? 'Create your first NPC!'
+                : searchQuery
+                ? 'Try a different search term'
+                : 'No NPCs in this faction'}
+            </p>
+            {npcs.length === 0 && (
+              <Button variant="primary" onClick={() => setShowCreateModal(true)} className="gap-2">
+                <Plus size={18} />
+                Create NPC
+              </Button>
+            )}
+          </Card>
+        ) : (
+          <div
+            className={
+              viewMode === 'grid'
+                ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
+                : 'space-y-4'
+            }
+          >
+            {filteredNpcs.map((npc) => (
+              <Card key={npc.id} variant="hover">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <CardTitle>{npc.name}</CardTitle>
+                    {npc.faction && <Badge variant="secondary">{npc.faction}</Badge>}
+                  </div>
+                  <CardDescription className="line-clamp-3">{npc.personality}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {npc.voiceId && (
+                      <div className="text-sm text-gray-400">
+                        Voice: <span className="text-gray-300">{npc.voiceId}</span>
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-500">
+                      Created: {new Date(npc.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Create NPC Modal */}
+      <Modal open={showCreateModal} onClose={() => setShowCreateModal(false)} size="lg">
+        <ModalHeader title="Create NPC" onClose={() => setShowCreateModal(false)} />
+        <ModalBody>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Name</label>
+              <Input
+                type="text"
+                value={newNpc.name}
+                onChange={(e) => setNewNpc({ ...newNpc, name: e.target.value })}
+                placeholder="Enter NPC name"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Personality</label>
+              <Textarea
+                value={newNpc.personality}
+                onChange={(e) => setNewNpc({ ...newNpc, personality: e.target.value })}
+                placeholder="Describe the NPC's personality, background, and traits..."
+                rows={6}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Faction (Optional)</label>
+              <Input
+                type="text"
+                value={newNpc.faction}
+                onChange={(e) => setNewNpc({ ...newNpc, faction: e.target.value })}
+                placeholder="e.g., Royal Guard, Merchant Guild"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-white mb-2">Voice (Optional)</label>
+              <Input
+                type="text"
+                value={newNpc.voiceId}
+                onChange={(e) => setNewNpc({ ...newNpc, voiceId: e.target.value })}
+                placeholder="Voice ID or assignment"
+              />
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setShowCreateModal(false)
+              setNewNpc({ name: '', personality: '', faction: '', voiceId: '' })
+            }}
+            disabled={isCreating}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleCreateNpc}
+            disabled={isCreating || !newNpc.name.trim() || !newNpc.personality.trim()}
+          >
+            {isCreating ? 'Creating...' : 'Create NPC'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+    </DashboardLayout>
+  )
+}
