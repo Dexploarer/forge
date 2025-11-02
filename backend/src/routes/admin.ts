@@ -504,15 +504,29 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
   }, async (request) => {
+    const debugInfo: string[] = []
+
     try {
+      debugInfo.push('🔄 Admin triggered MinIO to DB sync')
       fastify.log.info('🔄 Admin triggered MinIO to DB sync')
 
       const { minioStorageService } = await import('../services/minio.service')
 
-      if (!minioStorageService.isAvailable()) {
+      const isAvailable = minioStorageService.isAvailable()
+      debugInfo.push(`MinIO available: ${isAvailable}`)
+
+      if (!isAvailable) {
+        const envVars = {
+          MINIO_ENDPOINT: process.env.MINIO_ENDPOINT || 'NOT SET',
+          MINIO_ROOT_USER: process.env.MINIO_ROOT_USER ? 'SET' : 'NOT SET',
+          MINIO_ROOT_PASSWORD: process.env.MINIO_ROOT_PASSWORD ? 'SET' : 'NOT SET',
+          MINIO_PORT: process.env.MINIO_PORT || 'NOT SET',
+        }
+        debugInfo.push(`Env vars: ${JSON.stringify(envVars)}`)
+
         return {
           success: false,
-          message: 'MinIO service is not available',
+          message: `MinIO service not available. Debug: ${debugInfo.join('; ')}`,
           created: 0,
           skipped: 0,
           total: 0,
@@ -520,18 +534,23 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       const MINIO_PUBLIC_HOST = process.env.MINIO_PUBLIC_HOST || 'bucket-staging-4c7a.up.railway.app'
+      debugInfo.push(`Public host: ${MINIO_PUBLIC_HOST}`)
 
       // Scan all MinIO buckets
       const buckets = ['assets', 'uploads', 'audio', '3d-models', 'images']
+      debugInfo.push(`Scanning buckets: ${buckets.join(', ')}`)
+
       let created = 0
       let skipped = 0
       let totalFiles = 0
 
       for (const bucket of buckets) {
         try {
+          debugInfo.push(`Listing files in bucket: ${bucket}`)
           const files = await minioStorageService.listFiles(bucket)
           totalFiles += files.length
 
+          debugInfo.push(`Found ${files.length} files in bucket: ${bucket}`)
           fastify.log.info(`Found ${files.length} files in bucket: ${bucket}`)
 
           for (const filename of files) {
@@ -608,12 +627,13 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
             fastify.log.info(`Created asset: ${name} (${bucket})`)
           }
         } catch (bucketError: any) {
+          debugInfo.push(`Bucket error for ${bucket}: ${bucketError.message}`)
           fastify.log.warn(`Failed to process bucket ${bucket}:`, bucketError.message)
         }
       }
 
-      const message = `Synced ${created} new assets, skipped ${skipped} existing from ${totalFiles} total files`
-      fastify.log.info(`✅ ${message}`)
+      const message = `Synced ${created} new assets, skipped ${skipped} existing from ${totalFiles} total files. Debug: ${debugInfo.join('; ')}`
+      fastify.log.info(`✅ Sync complete`)
 
       return {
         success: true,
@@ -623,10 +643,11 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         total: totalFiles,
       }
     } catch (error: any) {
+      debugInfo.push(`Fatal error: ${error.message}`)
       fastify.log.error('Failed to sync MinIO assets:', error)
       return {
         success: false,
-        message: error.message || 'Failed to sync MinIO assets',
+        message: `${error.message || 'Failed to sync MinIO assets'}. Debug: ${debugInfo.join('; ')}`,
         created: 0,
         skipped: 0,
         total: 0,
