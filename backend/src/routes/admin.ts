@@ -9,7 +9,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/debug-auth', {
     preHandler: [fastify.authenticate],
     schema: {
-      description: 'Debug endpoint to check authentication',
+      description: 'Debug endpoint to check authentication and admin status',
       summary: 'Debug auth',
       tags: ['admin'],
       security: [{ bearerAuth: [] }],
@@ -17,76 +17,34 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request) => {
     return {
       authenticated: !!request.user,
-      userId: request.user?.id,
-      role: request.user?.role,
-      roleType: typeof request.user?.role,
+      privyUserId: request.user?.privyUserId,
+      walletAddress: request.user?.walletAddress,
+      email: request.user?.email,
+      isAdmin: request.user?.isAdmin,
       fullUser: request.user
     }
   })
 
-  // Bootstrap endpoint - make first admin (only works if no admins exist)
-  fastify.post('/bootstrap-admin', {
-    preHandler: [fastify.authenticate],
-    schema: {
-      description: 'Bootstrap first admin user (only works if no admins exist)',
-      summary: 'Bootstrap admin',
-      tags: ['admin'],
-      security: [{ bearerAuth: [] }],
-    }
-  }, async (request, reply) => {
-    // Check if any admin users exist
-    const existingAdmin = await fastify.db.query.users.findFirst({
-      where: eq(users.role, 'admin')
-    })
-
-    if (existingAdmin) {
-      return reply.status(403).send({
-        error: 'Admin user already exists. This endpoint is disabled.'
-      })
-    }
-
-    // Promote current user to admin
-    const [updatedUser] = await fastify.db
-      .update(users)
-      .set({ role: 'admin', updatedAt: new Date() })
-      .where(eq(users.id, request.user!.id))
-      .returning()
-
-    fastify.log.warn({
-      userId: updatedUser.id,
-      walletAddress: updatedUser.walletAddress
-    }, 'Bootstrapped first admin user')
-
-    return {
-      success: true,
-      message: 'You are now an admin',
-      user: {
-        id: updatedUser.id,
-        role: updatedUser.role
-      }
-    }
-  })
-
-  // Middleware to check admin role
+  // Middleware to check admin access (wallet whitelist)
   const requireAdmin = async (request: any) => {
-    fastify.log.info({
-      hasUser: !!request.user,
-      userId: request.user?.id,
-      userRole: request.user?.role,
-      userPrivyId: request.user?.privyUserId,
-      roleType: typeof request.user?.role,
-      roleCheck: request.user?.role === 'admin',
-      roleStrictCheck: request.user?.role !== 'admin'
-    }, 'Admin access check')
-
-    if (!request.user || request.user.role !== 'admin') {
-      fastify.log.warn({
-        hasUser: !!request.user,
-        userRole: request.user?.role,
-        failReason: !request.user ? 'no user' : 'role not admin'
-      }, 'Admin access denied')
+    if (!request.user) {
+      fastify.log.warn('Admin access denied: No authenticated user')
       throw new ForbiddenError('Admin access required')
     }
+
+    if (!request.user.isAdmin) {
+      fastify.log.warn({
+        privyUserId: request.user.privyUserId,
+        wallet: request.user.walletAddress,
+        isAdmin: request.user.isAdmin
+      }, 'Admin access denied: Not in admin whitelist')
+      throw new ForbiddenError('Admin access required')
+    }
+
+    fastify.log.info({
+      privyUserId: request.user.privyUserId,
+      wallet: request.user.walletAddress
+    }, 'Admin access granted')
   }
 
   // Dashboard statistics
@@ -566,12 +524,14 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       }
     } catch (error: any) {
       fastify.log.error('Failed to setup Qdrant:', error)
-      return reply.status(500).send({
+      // Return error response with 200 status but success: false
+      // This matches the schema better than throwing
+      return {
         success: false,
-        message: error.message,
+        message: error.message || 'Failed to setup Qdrant',
         collections: 0,
         itemsEmbedded: 0,
-      })
+      }
     }
   })
 }

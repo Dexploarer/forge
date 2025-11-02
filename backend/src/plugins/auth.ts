@@ -4,13 +4,18 @@ import { PrivyClient } from '@privy-io/server-auth'
 import { env } from '../config/env'
 import { db } from '../database/db'
 import { users } from '../database/schema'
-import { eq, like } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { UnauthorizedError } from '../utils/errors'
+
+// Extended user type with admin flag
+type PrivyAuthUser = typeof users.$inferSelect & {
+  isAdmin: boolean
+}
 
 // Type augmentation
 declare module 'fastify' {
   interface FastifyRequest {
-    user?: typeof users.$inferSelect
+    user?: PrivyAuthUser
   }
 
   interface FastifyInstance {
@@ -38,13 +43,11 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // Authentication preHandler hook
+  // Authentication preHandler hook - Privy verification + wallet whitelist admin
   fastify.decorate('authenticate', async function(request, _reply) {
     try {
       // Extract token from Authorization header
       const authHeader = request.headers.authorization
-      fastify.log.info({ url: request.url, hasAuth: !!authHeader }, 'Auth attempt')
-
       if (!authHeader) {
         throw new UnauthorizedError('Missing authorization header')
       }
@@ -54,79 +57,33 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
         throw new UnauthorizedError('Invalid authorization format')
       }
 
-      fastify.log.info({ tokenPrefix: token.substring(0, 20) }, 'Token received')
-
-      // TEST MODE: Skip Privy and look up real users from database
+      // Verify Privy token
       let privyUserId: string
 
       if (env.NODE_ENV === 'test' || token.startsWith('mock-')) {
-        // Real E2E test mode - look up actual users in database by token pattern
-        if (token.includes('admin')) {
-          // Look for admin by specific privy ID patterns - try exact matches first
-          let adminUser = await db.query.users.findFirst({
-            where: eq(users.privyUserId, 'test-admin-privy-id')
-          })
-
-          if (!adminUser) {
-            adminUser = await db.query.users.findFirst({
-              where: eq(users.privyUserId, 'analytics-admin-privy-id')
-            })
-          }
-
-          // Only use pattern matching as fallback
-          if (!adminUser) {
-            adminUser = await db.query.users.findFirst({
-              where: like(users.privyUserId, '%admin%')
-            })
-          }
-
-          if (!adminUser) {
-            throw new UnauthorizedError('Admin test user not found')
-          }
-          privyUserId = adminUser.privyUserId
-        } else if (token.includes('member') || token.includes('owner') || token.includes('search') || token.includes('other')) {
-          // Extract email from token pattern: mock-{email}-token -> {email}@test.com
-          const emailPrefix = token.replace('mock-', '').replace('-token', '')
-          const exactEmail = `${emailPrefix}@test.com`
-          const memberUser = await db.query.users.findFirst({
-            where: eq(users.email, exactEmail)
-          })
-          if (!memberUser) {
-            throw new UnauthorizedError('Test user not found')
-          }
-          privyUserId = memberUser.privyUserId
-        } else {
-          throw new UnauthorizedError('Invalid test token')
-        }
+        // Test mode
+        privyUserId = token.includes('admin') ? 'test-admin-privy-id' : 'test-member-privy-id'
       } else {
-        // PRODUCTION MODE: Use Privy verification
-        fastify.log.info('Verifying Privy token...')
+        // Production: Verify Privy JWT
         const claims = await privy.verifyAuthToken(token)
         privyUserId = claims.userId
-        fastify.log.info({ privyUserId }, 'Privy token verified')
       }
 
-      // Find or create user
+      // Find or create user in database
       let user = await db.query.users.findFirst({
         where: eq(users.privyUserId, privyUserId)
       })
 
       if (!user) {
-        // Create user on first login - fetch full user data from Privy
-        fastify.log.info({ privyUserId }, 'New user - fetching data from Privy')
+        // Create user on first login
         const privyUser = await privy.getUser(privyUserId)
-        fastify.log.info({ privyUser }, 'Privy user data retrieved')
 
-        // Extract wallet address (primary wallet if multiple)
-        const walletAddress = privyUser.wallet?.address ||
-                             privyUser.linkedAccounts?.find((acc: any) => acc.type === 'wallet')?.address
+        const walletAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'wallet') as any
+        const emailAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'email') as any
+        const farcasterAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'farcaster') as any
 
-        // Extract email
-        const email = privyUser.email?.address ||
-                     privyUser.linkedAccounts?.find((acc: any) => acc.type === 'email')?.address
-
-        // Extract Farcaster data
-        const farcasterAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'farcaster')
+        const walletAddress = privyUser.wallet?.address || walletAccount?.address || null
+        const email = privyUser.email?.address || emailAccount?.address || null
 
         const [newUser] = await db.insert(users).values({
           privyUserId,
@@ -134,58 +91,48 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
           walletAddress: walletAddress || null,
           farcasterFid: farcasterAccount?.fid || null,
           farcasterUsername: farcasterAccount?.username || null,
-          farcasterVerified: farcasterAccount?.verified || false,
+          farcasterVerified: farcasterAccount?.verifiedAt ? true : false,
           farcasterProfile: farcasterAccount ? {
             displayName: farcasterAccount.displayName,
             pfp: farcasterAccount.pfp,
             bio: farcasterAccount.bio,
           } : null,
-          role: 'member',
+          role: 'member', // Keep for backwards compatibility
           lastLoginAt: new Date(),
         }).returning()
         user = newUser
-        if (user) {
-          fastify.log.info({ userId: user.id, email: user.email, wallet: user.walletAddress }, '✅ NEW USER CREATED IN DATABASE')
-        }
       } else {
-        // Update last login and sync latest data from Privy
-        const privyUser = await privy.getUser(privyUserId)
-
-        const walletAddress = privyUser.wallet?.address ||
-                             privyUser.linkedAccounts?.find((acc: any) => acc.type === 'wallet')?.address
-        const email = privyUser.email?.address ||
-                     privyUser.linkedAccounts?.find((acc: any) => acc.type === 'email')?.address
-        const farcasterAccount = privyUser.linkedAccounts?.find((acc: any) => acc.type === 'farcaster')
-
+        // Update last login
         await db.update(users)
-          .set({
-            lastLoginAt: new Date(),
-            // Update wallet and email if changed
-            walletAddress: walletAddress || user.walletAddress,
-            email: email || user.email,
-            farcasterFid: farcasterAccount?.fid || user.farcasterFid,
-            farcasterUsername: farcasterAccount?.username || user.farcasterUsername,
-            farcasterVerified: farcasterAccount?.verified || user.farcasterVerified,
-          })
+          .set({ lastLoginAt: new Date() })
           .where(eq(users.id, user.id))
-
-        // Refresh user data
-        user = await db.query.users.findFirst({
-          where: eq(users.id, user.id)
-        }) || user
       }
 
-      // Attach user to request (guaranteed to be defined here)
-      if (user) {
-        request.user = user
+      if (!user) {
+        throw new UnauthorizedError('Failed to create or find user')
       }
+
+      // Check if wallet is in admin whitelist
+      const isAdmin = user.walletAddress
+        ? env.ADMIN_WALLETS.includes(user.walletAddress.toLowerCase())
+        : false
+
+      // Attach user with admin flag to request
+      request.user = {
+        ...user,
+        isAdmin
+      }
+
+      fastify.log.info({
+        userId: user.id,
+        wallet: user.walletAddress,
+        isAdmin
+      }, 'Authentication successful')
 
     } catch (error) {
-      // If it's already an UnauthorizedError, rethrow it
       if (error instanceof UnauthorizedError) {
         throw error
       }
-      // For other errors, wrap in UnauthorizedError
       fastify.log.error({ error }, 'Authentication failed')
       throw new UnauthorizedError('Unauthorized')
     }
@@ -200,55 +147,31 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       const token = authHeader.replace('Bearer ', '')
       if (!token) return
 
-      // TEST MODE: Skip Privy and look up real users from database
+      // Verify Privy token
       let privyUserId: string
 
       if (env.NODE_ENV === 'test' || token.startsWith('mock-')) {
-        if (token.includes('admin')) {
-          // Look for admin by specific privy ID patterns - try exact matches first
-          let adminUser = await db.query.users.findFirst({
-            where: eq(users.privyUserId, 'test-admin-privy-id')
-          })
-
-          if (!adminUser) {
-            adminUser = await db.query.users.findFirst({
-              where: eq(users.privyUserId, 'analytics-admin-privy-id')
-            })
-          }
-
-          // Only use pattern matching as fallback
-          if (!adminUser) {
-            adminUser = await db.query.users.findFirst({
-              where: like(users.privyUserId, '%admin%')
-            })
-          }
-
-          if (!adminUser) return
-          privyUserId = adminUser.privyUserId
-        } else if (token.includes('member') || token.includes('owner') || token.includes('search') || token.includes('other')) {
-          // Extract email from token pattern: mock-{email}-token -> {email}@test.com
-          const emailPrefix = token.replace('mock-', '').replace('-token', '')
-          const exactEmail = `${emailPrefix}@test.com`
-          const memberUser = await db.query.users.findFirst({
-            where: eq(users.email, exactEmail)
-          })
-          if (!memberUser) return
-          privyUserId = memberUser.privyUserId
-        } else {
-          return
-        }
+        privyUserId = token.includes('admin') ? 'test-admin-privy-id' : 'test-member-privy-id'
       } else {
-        // PRODUCTION MODE: Use Privy verification
         const claims = await privy.verifyAuthToken(token)
         privyUserId = claims.userId
       }
 
+      // Find user in database
       const user = await db.query.users.findFirst({
         where: eq(users.privyUserId, privyUserId)
       })
 
       if (user) {
-        request.user = user
+        // Check if wallet is in admin whitelist
+        const isAdmin = user.walletAddress
+          ? env.ADMIN_WALLETS.includes(user.walletAddress.toLowerCase())
+          : false
+
+        request.user = {
+          ...user,
+          isAdmin
+        }
       }
     } catch (error) {
       // Silent fail for optional auth
