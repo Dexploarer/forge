@@ -51,6 +51,9 @@ export default function LorePage() {
     category: 'history' as LoreEntry['category'],
     tags: '',
   })
+  const [showAiGenerate, setShowAiGenerate] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const categories: Array<{ value: LoreEntry['category'] | 'all'; label: string }> = [
     { value: 'all', label: 'All' },
@@ -108,6 +111,52 @@ export default function LorePage() {
       console.error('Failed to create lore:', error)
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return
+
+    setIsGenerating(true)
+    try {
+      const response = await apiFetch('/api/lore/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          projectId: 'default-project-id', // TODO: Get from context/props
+          category: newLore.category,
+          useContext: true,
+          contextLimit: 5,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const loreEntry = data.lore
+
+        // Populate form with generated data
+        setNewLore({
+          title: loreEntry.title || '',
+          content: loreEntry.content || '',
+          category: loreEntry.category || newLore.category,
+          tags: loreEntry.tags?.join(', ') || '',
+        })
+
+        setShowAiGenerate(false)
+        setAiPrompt('')
+      } else {
+        const error = await response.text()
+        console.error('AI generation failed:', error)
+        alert('AI generation failed. Please try again.')
+      }
+    } catch (error) {
+      console.error('Failed to generate lore:', error)
+      alert('Failed to generate lore. Please try again.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -382,66 +431,121 @@ export default function LorePage() {
         <ModalHeader title="Create Lore Entry" onClose={() => setShowCreateModal(false)} />
         <ModalBody>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Title</label>
-              <Input
-                type="text"
-                value={newLore.title}
-                onChange={(e) => setNewLore({ ...newLore, title: e.target.value })}
-                placeholder="Enter lore title"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Category</label>
-              <div className="grid grid-cols-3 gap-2">
-                {categories
-                  .filter((cat) => cat.value !== 'all')
-                  .map((cat) => (
-                    <button
-                      key={cat.value}
-                      onClick={() =>
-                        setNewLore({ ...newLore, category: cat.value as LoreEntry['category'] })
-                      }
-                      className={`px-3 py-2 rounded-lg text-sm transition-all ${
-                        newLore.category === cat.value
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-800 text-gray-300 border border-slate-700 hover:border-blue-500'
-                      }`}
-                    >
-                      {cat.label}
-                    </button>
-                  ))}
+            {/* AI Generation Section */}
+            {!showAiGenerate ? (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sparkles size={20} className="text-purple-400" />
+                    <div>
+                      <h4 className="text-sm font-medium text-white">Generate with AI</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Let AI create immersive lore based on your description
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowAiGenerate(true)}
+                    className="gap-2"
+                  >
+                    <Sparkles size={16} />
+                    Generate
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Content</label>
-              <Textarea
-                value={newLore.content}
-                onChange={(e) => setNewLore({ ...newLore, content: e.target.value })}
-                placeholder="Write your lore content..."
-                rows={8}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Tags (comma-separated)
-              </label>
-              <Input
-                type="text"
-                value={newLore.tags}
-                onChange={(e) => setNewLore({ ...newLore, tags: e.target.value })}
-                placeholder="ancient, magical, legendary"
-              />
-            </div>
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-              <div className="flex items-start gap-3">
-                <Sparkles size={20} className="text-blue-400 shrink-0 mt-0.5" />
+            ) : (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-purple-400" />
+                  <h4 className="text-sm font-medium text-white">AI Generation</h4>
+                </div>
+                <Textarea
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Describe the lore you want to create... (e.g., 'The ancient war between dragons and the first kingdoms')"
+                  rows={4}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAiGenerate}
+                    disabled={isGenerating || !aiPrompt.trim()}
+                    className="gap-2"
+                  >
+                    {isGenerating ? 'Generating...' : 'Generate Lore'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowAiGenerate(false)
+                      setAiPrompt('')
+                    }}
+                    disabled={isGenerating}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-slate-700 pt-4">
+              <p className="text-xs text-gray-400 mb-4">Or create manually:</p>
+              <div className="space-y-4">
                 <div>
-                  <h4 className="text-sm font-medium text-blue-400 mb-1">AI Generation</h4>
-                  <p className="text-xs text-gray-400">
-                    Generate lore content with AI using the /api/ai-gateway endpoint
-                  </p>
+                  <label className="block text-sm font-medium text-white mb-2">Title</label>
+                  <Input
+                    type="text"
+                    value={newLore.title}
+                    onChange={(e) => setNewLore({ ...newLore, title: e.target.value })}
+                    placeholder="Enter lore title"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Category</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {categories
+                      .filter((cat) => cat.value !== 'all')
+                      .map((cat) => (
+                        <button
+                          key={cat.value}
+                          onClick={() =>
+                            setNewLore({ ...newLore, category: cat.value as LoreEntry['category'] })
+                          }
+                          className={`px-3 py-2 rounded-lg text-sm transition-all ${
+                            newLore.category === cat.value
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-slate-800 text-gray-300 border border-slate-700 hover:border-blue-500'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Content</label>
+                  <Textarea
+                    value={newLore.content}
+                    onChange={(e) => setNewLore({ ...newLore, content: e.target.value })}
+                    placeholder="Write your lore content..."
+                    rows={8}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Tags (comma-separated)
+                  </label>
+                  <Input
+                    type="text"
+                    value={newLore.tags}
+                    onChange={(e) => setNewLore({ ...newLore, tags: e.target.value })}
+                    placeholder="ancient, magical, legendary"
+                  />
                 </div>
               </div>
             </div>

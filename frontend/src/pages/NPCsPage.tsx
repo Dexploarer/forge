@@ -3,7 +3,7 @@
  * Create and manage non-player characters
  */
 
-import { Users, Plus, Search, Grid, List, Star } from 'lucide-react'
+import { Users, Plus, Search, Grid, List, Star, Sparkles } from 'lucide-react'
 import { useState, useEffect, type ReactNode } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -56,6 +56,9 @@ export default function NPCsPage() {
   })
   const [selectedNpc, setSelectedNpc] = useState<NPC | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [showAiGenerate, setShowAiGenerate] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   useEffect(() => {
     fetchNpcs()
@@ -103,6 +106,51 @@ export default function NPCsPage() {
       console.error('Failed to create NPC:', error)
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return
+
+    setIsGenerating(true)
+    try {
+      const response = await apiFetch('/api/npcs/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          projectId: 'default-project-id', // TODO: Get from context/props
+          useContext: true,
+          contextLimit: 5,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const npc = data.npc
+
+        // Populate form with generated data
+        setNewNpc({
+          name: npc.name || '',
+          personality: npc.personality || npc.description || '',
+          faction: npc.faction || npc.race || '',
+          voiceId: '',
+        })
+
+        setShowAiGenerate(false)
+        setAiPrompt('')
+      } else {
+        const error = await response.text()
+        console.error('AI generation failed:', error)
+        alert('AI generation failed. Please try again.')
+      }
+    } catch (error) {
+      console.error('Failed to generate NPC:', error)
+      alert('Failed to generate NPC. Please try again.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -382,42 +430,108 @@ export default function NPCsPage() {
         <ModalHeader title="Create NPC" onClose={() => setShowCreateModal(false)} />
         <ModalBody>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Name</label>
-              <Input
-                type="text"
-                value={newNpc.name}
-                onChange={(e) => setNewNpc({ ...newNpc, name: e.target.value })}
-                placeholder="Enter NPC name"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Personality</label>
-              <Textarea
-                value={newNpc.personality}
-                onChange={(e) => setNewNpc({ ...newNpc, personality: e.target.value })}
-                placeholder="Describe the NPC's personality, background, and traits..."
-                rows={6}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Faction (Optional)</label>
-              <Input
-                type="text"
-                value={newNpc.faction}
-                onChange={(e) => setNewNpc({ ...newNpc, faction: e.target.value })}
-                placeholder="e.g., Royal Guard, Merchant Guild"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Voice (Optional)</label>
-              <Input
-                type="text"
-                value={newNpc.voiceId}
-                onChange={(e) => setNewNpc({ ...newNpc, voiceId: e.target.value })}
-                placeholder="Voice ID or assignment"
-              />
+            {/* AI Generation Section */}
+            {!showAiGenerate ? (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sparkles size={20} className="text-purple-400" />
+                    <div>
+                      <h4 className="text-sm font-medium text-white">Generate with AI</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Let AI create a complete NPC based on your description
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowAiGenerate(true)}
+                    className="gap-2"
+                  >
+                    <Sparkles size={16} />
+                    Generate
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-purple-400" />
+                  <h4 className="text-sm font-medium text-white">AI Generation</h4>
+                </div>
+                <Textarea
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Describe the NPC you want to create... (e.g., 'A wise old wizard who guards ancient secrets')"
+                  rows={4}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAiGenerate}
+                    disabled={isGenerating || !aiPrompt.trim()}
+                    className="gap-2"
+                  >
+                    {isGenerating ? 'Generating...' : 'Generate NPC'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowAiGenerate(false)
+                      setAiPrompt('')
+                    }}
+                    disabled={isGenerating}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-slate-700 pt-4">
+              <p className="text-xs text-gray-400 mb-4">Or create manually:</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Name</label>
+                  <Input
+                    type="text"
+                    value={newNpc.name}
+                    onChange={(e) => setNewNpc({ ...newNpc, name: e.target.value })}
+                    placeholder="Enter NPC name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Personality</label>
+                  <Textarea
+                    value={newNpc.personality}
+                    onChange={(e) => setNewNpc({ ...newNpc, personality: e.target.value })}
+                    placeholder="Describe the NPC's personality, background, and traits..."
+                    rows={6}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Faction (Optional)</label>
+                  <Input
+                    type="text"
+                    value={newNpc.faction}
+                    onChange={(e) => setNewNpc({ ...newNpc, faction: e.target.value })}
+                    placeholder="e.g., Royal Guard, Merchant Guild"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Voice (Optional)</label>
+                  <Input
+                    type="text"
+                    value={newNpc.voiceId}
+                    onChange={(e) => setNewNpc({ ...newNpc, voiceId: e.target.value })}
+                    placeholder="Voice ID or assignment"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </ModalBody>

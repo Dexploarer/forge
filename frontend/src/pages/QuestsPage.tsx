@@ -3,7 +3,7 @@
  * Create and manage game quests
  */
 
-import { Target, Plus, Search, Grid, List, CheckCircle, Users, MapPin, Scroll, Award } from 'lucide-react'
+import { Target, Plus, Search, Grid, List, CheckCircle, Users, MapPin, Scroll, Award, Sparkles } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -57,6 +57,9 @@ export default function QuestsPage() {
     objectives: '',
     rewards: '',
   })
+  const [showAiGenerate, setShowAiGenerate] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [isGenerating, setIsGenerating] = useState(false)
 
   const statuses: Array<{ value: Quest['status'] | 'all'; label: string }> = [
     { value: 'all', label: 'All' },
@@ -112,6 +115,68 @@ export default function QuestsPage() {
       console.error('Failed to create quest:', error)
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleAiGenerate = async () => {
+    if (!aiPrompt.trim()) return
+
+    setIsGenerating(true)
+    try {
+      const response = await apiFetch('/api/quests/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          projectId: 'default-project-id', // TODO: Get from context/props
+          questType: 'side',
+          difficulty: 'medium',
+          useContext: true,
+          contextLimit: 5,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const quest = data.quest
+
+        // Format objectives as newline-separated string
+        const objectivesText = quest.objectives
+          ?.map((obj: any) => obj.description || obj)
+          .join('\n') || ''
+
+        // Format rewards
+        const rewardsText = []
+        if (quest.rewards?.experience) rewardsText.push(`${quest.rewards.experience} XP`)
+        if (quest.rewards?.gold) rewardsText.push(`${quest.rewards.gold} gold`)
+        if (quest.rewards?.items?.length) {
+          quest.rewards.items.forEach((item: any) => {
+            rewardsText.push(`${item.name} x${item.quantity}`)
+          })
+        }
+
+        // Populate form with generated data
+        setNewQuest({
+          title: quest.name || '',
+          description: quest.description || '',
+          objectives: objectivesText,
+          rewards: rewardsText.join(', '),
+        })
+
+        setShowAiGenerate(false)
+        setAiPrompt('')
+      } else {
+        const error = await response.text()
+        console.error('AI generation failed:', error)
+        alert('AI generation failed. Please try again.')
+      }
+    } catch (error) {
+      console.error('Failed to generate quest:', error)
+      alert('Failed to generate quest. Please try again.')
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -327,44 +392,110 @@ export default function QuestsPage() {
         <ModalHeader title="Create Quest" onClose={() => setShowCreateModal(false)} />
         <ModalBody>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Title</label>
-              <Input
-                type="text"
-                value={newQuest.title}
-                onChange={(e) => setNewQuest({ ...newQuest, title: e.target.value })}
-                placeholder="Enter quest title"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Description</label>
-              <Textarea
-                value={newQuest.description}
-                onChange={(e) => setNewQuest({ ...newQuest, description: e.target.value })}
-                placeholder="Describe the quest story and context..."
-                rows={4}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Objectives (one per line)
-              </label>
-              <Textarea
-                value={newQuest.objectives}
-                onChange={(e) => setNewQuest({ ...newQuest, objectives: e.target.value })}
-                placeholder="Find the ancient artifact&#10;Defeat the guardian&#10;Return to the quest giver"
-                rows={5}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">Rewards</label>
-              <Input
-                type="text"
-                value={newQuest.rewards}
-                onChange={(e) => setNewQuest({ ...newQuest, rewards: e.target.value })}
-                placeholder="e.g., 500 gold, Legendary Sword, +10 reputation"
-              />
+            {/* AI Generation Section */}
+            {!showAiGenerate ? (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Sparkles size={20} className="text-purple-400" />
+                    <div>
+                      <h4 className="text-sm font-medium text-white">Generate with AI</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Let AI create an engaging quest with objectives and rewards
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowAiGenerate(true)}
+                    className="gap-2"
+                  >
+                    <Sparkles size={16} />
+                    Generate
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} className="text-purple-400" />
+                  <h4 className="text-sm font-medium text-white">AI Generation</h4>
+                </div>
+                <Textarea
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Describe the quest you want to create... (e.g., 'A quest to retrieve a stolen magical artifact from a bandit camp')"
+                  rows={4}
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAiGenerate}
+                    disabled={isGenerating || !aiPrompt.trim()}
+                    className="gap-2"
+                  >
+                    {isGenerating ? 'Generating...' : 'Generate Quest'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setShowAiGenerate(false)
+                      setAiPrompt('')
+                    }}
+                    disabled={isGenerating}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-slate-700 pt-4">
+              <p className="text-xs text-gray-400 mb-4">Or create manually:</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Title</label>
+                  <Input
+                    type="text"
+                    value={newQuest.title}
+                    onChange={(e) => setNewQuest({ ...newQuest, title: e.target.value })}
+                    placeholder="Enter quest title"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Description</label>
+                  <Textarea
+                    value={newQuest.description}
+                    onChange={(e) => setNewQuest({ ...newQuest, description: e.target.value })}
+                    placeholder="Describe the quest story and context..."
+                    rows={4}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">
+                    Objectives (one per line)
+                  </label>
+                  <Textarea
+                    value={newQuest.objectives}
+                    onChange={(e) => setNewQuest({ ...newQuest, objectives: e.target.value })}
+                    placeholder="Find the ancient artifact&#10;Defeat the guardian&#10;Return to the quest giver"
+                    rows={5}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white mb-2">Rewards</label>
+                  <Input
+                    type="text"
+                    value={newQuest.rewards}
+                    onChange={(e) => setNewQuest({ ...newQuest, rewards: e.target.value })}
+                    placeholder="e.g., 500 gold, Legendary Sword, +10 reputation"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </ModalBody>
