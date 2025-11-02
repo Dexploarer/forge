@@ -5,19 +5,42 @@ import { users, assets } from '../database/schema'
 import { ForbiddenError, NotFoundError } from '../utils/errors'
 
 const adminRoutes: FastifyPluginAsync = async (fastify) => {
+  // Debug endpoint to check auth status
+  fastify.get('/debug-auth', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Debug endpoint to check authentication',
+      summary: 'Debug auth',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+    }
+  }, async (request) => {
+    return {
+      authenticated: !!request.user,
+      userId: request.user?.id,
+      role: request.user?.role,
+      roleType: typeof request.user?.role,
+      fullUser: request.user
+    }
+  })
+
   // Middleware to check admin role
   const requireAdmin = async (request: any) => {
     fastify.log.info({
       hasUser: !!request.user,
       userId: request.user?.id,
       userRole: request.user?.role,
-      userPrivyId: request.user?.privyUserId
+      userPrivyId: request.user?.privyUserId,
+      roleType: typeof request.user?.role,
+      roleCheck: request.user?.role === 'admin',
+      roleStrictCheck: request.user?.role !== 'admin'
     }, 'Admin access check')
 
     if (!request.user || request.user.role !== 'admin') {
       fastify.log.warn({
         hasUser: !!request.user,
-        userRole: request.user?.role
+        userRole: request.user?.role,
+        failReason: !request.user ? 'no user' : 'role not admin'
       }, 'Admin access denied')
       throw new ForbiddenError('Admin access required')
     }
