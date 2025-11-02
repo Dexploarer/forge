@@ -126,6 +126,55 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  // List all users
+  fastify.get('/users', {
+    preHandler: [fastify.authenticate, requireAdmin],
+    schema: {
+      description: 'Get all users (admin only)',
+      summary: 'List users',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: z.object({
+          users: z.array(z.object({
+            id: z.string().uuid(),
+            name: z.string(),
+            email: z.string().nullable(),
+            role: z.enum(['admin', 'member', 'guest']),
+            walletAddress: z.string().nullable(),
+            createdAt: z.string().datetime(),
+            lastLoginAt: z.string().datetime().nullable(),
+          }))
+        })
+      }
+    }
+  }, async (_request) => {
+    const allUsers = await fastify.db.query.users.findMany({
+      orderBy: [desc(users.createdAt)],
+      columns: {
+        id: true,
+        displayName: true,
+        email: true,
+        role: true,
+        walletAddress: true,
+        createdAt: true,
+        lastLoginAt: true,
+      }
+    })
+
+    return {
+      users: allUsers.map(user => ({
+        id: user.id,
+        name: user.displayName || user.email || user.walletAddress || 'Unknown User',
+        email: user.email,
+        role: user.role,
+        walletAddress: user.walletAddress,
+        createdAt: user.createdAt.toISOString(),
+        lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+      }))
+    }
+  })
+
   // Manage user roles
   fastify.patch('/users/:id/role', {
     preHandler: [fastify.authenticate, requireAdmin],

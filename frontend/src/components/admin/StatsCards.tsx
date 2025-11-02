@@ -1,34 +1,44 @@
 import { useEffect, useState } from 'react'
+import { useApiFetch } from '../../utils/api'
 
 interface PlatformStats {
-  users: { total: number }
-  projects: { total: number }
-  assets: { total: number }
-  teams: { total: number }
-  generations: {
-    total: number
-    completed: number
-    failed: number
-    successRate: string
-  }
+  totalUsers: number
+  totalAssets: number
+  publishedAssets: number
+  draftAssets: number
+  totalStorageBytes: number
+  newUsersToday: number
+  newAssetsToday: number
+  assetsByType: Record<string, number>
 }
 
 export function StatsCards() {
   const [stats, setStats] = useState<PlatformStats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const apiFetch = useApiFetch()
 
   useEffect(() => {
-    // TODO: Implement /api/admin/stats endpoint
-    // For now, just show mock data
-    setStats({
-      users: { total: 2 },
-      projects: { total: 0 },
-      assets: { total: 0 },
-      teams: { total: 0 },
-      generations: { total: 0, completed: 0, failed: 0, successRate: '0' }
-    })
-    setLoading(false)
+    const fetchStats = async () => {
+      try {
+        setLoading(true)
+        const response = await apiFetch('/api/admin/stats')
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch stats')
+        }
+
+        const data = await response.json()
+        setStats(data.stats)
+        setError(null)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load stats')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchStats()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -70,7 +80,7 @@ export function StatsCards() {
   const statCards = [
     {
       title: 'Total Users',
-      value: (stats.users?.total ?? 0).toLocaleString(),
+      value: (stats?.totalUsers ?? 0).toLocaleString(),
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -80,11 +90,11 @@ export function StatsCards() {
       bgColor: 'bg-blue-500/20'
     },
     {
-      title: 'Total Projects',
-      value: (stats.projects?.total ?? 0).toLocaleString(),
+      title: 'New Users Today',
+      value: (stats?.newUsersToday ?? 0).toLocaleString(),
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
         </svg>
       ),
       color: 'text-purple-400',
@@ -92,7 +102,7 @@ export function StatsCards() {
     },
     {
       title: 'Total Assets',
-      value: (stats.assets?.total ?? 0).toLocaleString(),
+      value: (stats?.totalAssets ?? 0).toLocaleString(),
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -102,30 +112,8 @@ export function StatsCards() {
       bgColor: 'bg-green-500/20'
     },
     {
-      title: 'Total Teams',
-      value: (stats.teams?.total ?? 0).toLocaleString(),
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-        </svg>
-      ),
-      color: 'text-orange-400',
-      bgColor: 'bg-orange-500/20'
-    },
-    {
-      title: 'Total Generations',
-      value: (stats.generations?.total ?? 0).toLocaleString(),
-      icon: (
-        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      ),
-      color: 'text-cyan-400',
-      bgColor: 'bg-cyan-500/20'
-    },
-    {
-      title: 'Success Rate',
-      value: `${stats.generations?.successRate ?? '0'}%`,
+      title: 'Published Assets',
+      value: (stats?.publishedAssets ?? 0).toLocaleString(),
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -133,6 +121,28 @@ export function StatsCards() {
       ),
       color: 'text-emerald-400',
       bgColor: 'bg-emerald-500/20'
+    },
+    {
+      title: 'Draft Assets',
+      value: (stats?.draftAssets ?? 0).toLocaleString(),
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      ),
+      color: 'text-orange-400',
+      bgColor: 'bg-orange-500/20'
+    },
+    {
+      title: 'New Assets Today',
+      value: (stats?.newAssetsToday ?? 0).toLocaleString(),
+      icon: (
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      ),
+      color: 'text-cyan-400',
+      bgColor: 'bg-cyan-500/20'
     }
   ]
 
