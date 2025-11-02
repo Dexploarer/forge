@@ -418,6 +418,73 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return { activity }
   })
 
+  // List MinIO buckets and files
+  fastify.get('/minio-buckets', {
+    preHandler: [fastify.authenticate, requireAdmin],
+    schema: {
+      description: 'List all MinIO buckets and their contents (admin only)',
+      summary: 'List MinIO buckets',
+      tags: ['admin'],
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: z.object({
+          success: z.boolean(),
+          buckets: z.array(z.object({
+            name: z.string(),
+            fileCount: z.number(),
+            files: z.array(z.string()),
+          }))
+        })
+      }
+    }
+  }, async (_request) => {
+    try {
+      const { minioStorageService } = await import('../services/minio.service')
+
+      if (!minioStorageService.isAvailable()) {
+        return {
+          success: false,
+          buckets: []
+        }
+      }
+
+      // Try all possible bucket names
+      const possibleBuckets = [
+        'assets', 'uploads', 'audio', '3d-models', 'images',
+        'forge-assets', 'hyperscape-assets', 'game-assets',
+      ]
+
+      const buckets: Array<{ name: string; fileCount: number; files: string[] }> = []
+
+      for (const bucketName of possibleBuckets) {
+        try {
+          const files = await minioStorageService.listFiles(bucketName)
+          if (files.length > 0 || true) { // Include even empty buckets
+            buckets.push({
+              name: bucketName,
+              fileCount: files.length,
+              files: files.slice(0, 10), // First 10 files as preview
+            })
+          }
+        } catch (error) {
+          // Bucket doesn't exist or can't be accessed
+          fastify.log.debug(`Bucket ${bucketName} not accessible`)
+        }
+      }
+
+      return {
+        success: true,
+        buckets
+      }
+    } catch (error: any) {
+      fastify.log.error('Failed to list MinIO buckets:', error)
+      return {
+        success: false,
+        buckets: []
+      }
+    }
+  })
+
   // Sync MinIO assets to database
   fastify.post('/sync-minio-assets', {
     preHandler: [fastify.authenticate, requireAdmin],
