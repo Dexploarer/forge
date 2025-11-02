@@ -4,11 +4,13 @@
  */
 
 import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Menu, X } from 'lucide-react'
 import { navigationConfig } from '../../config/navigation'
 import type { NavigationItem, NavigationLink } from '../../types/navigation'
 
 export function SideNavigation() {
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
@@ -18,7 +20,6 @@ export function SideNavigation() {
         .map(section => section.id)
     )
   )
-  const [activePath, setActivePath] = useState('/dashboard')
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
@@ -32,14 +33,12 @@ export function SideNavigation() {
     })
   }
 
-  const handleNavigation = (path: string) => {
-    setActivePath(path)
+  const handleMobileClose = () => {
     setMobileOpen(false)
-    // TODO: Integrate with actual router
   }
 
   const isActive = (path: string) => {
-    return activePath === path || activePath.startsWith(path + '/')
+    return location.pathname === path || location.pathname.startsWith(path + '/')
   }
 
   const renderNavigationLink = (link: NavigationLink) => {
@@ -47,9 +46,10 @@ export function SideNavigation() {
     const active = isActive(link.path)
 
     return (
-      <button
+      <Link
         key={link.id}
-        onClick={() => handleNavigation(link.path)}
+        to={link.path}
+        onClick={handleMobileClose}
         className={`
           w-full flex items-center gap-3 px-3 py-2 rounded-lg
           transition-all duration-200
@@ -83,7 +83,7 @@ export function SideNavigation() {
             )}
           </>
         )}
-      </button>
+      </Link>
     )
   }
 
@@ -190,8 +190,9 @@ export function SideNavigation() {
 
       {/* User Profile Section */}
       <div className="border-t border-slate-700/50 p-3">
-        <button
-          onClick={() => handleNavigation('/profile')}
+        <Link
+          to="/settings"
+          onClick={handleMobileClose}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-colors"
         >
           <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
@@ -203,7 +204,7 @@ export function SideNavigation() {
               <p className="text-xs text-gray-500 truncate">admin@forge.local</p>
             </div>
           )}
-        </button>
+        </Link>
       </div>
     </>
   )

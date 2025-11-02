@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import PasswordGate from './pages/PasswordGate'
 import AdminPage from './pages/AdminPage'
+import UsersPage from './pages/UsersPage'
+import ProjectsPage from './pages/ProjectsPage'
+import AssetsPage from './pages/AssetsPage'
+import LorePage from './pages/LorePage'
+import SettingsPage from './pages/SettingsPage'
 
 function App() {
   const [authenticated, setAuthenticated] = useState(false)
@@ -32,8 +38,20 @@ function App() {
     return <PasswordGate onAuthenticated={handleAuthenticated} />
   }
 
-  // Always show admin page when authenticated
-  return <AdminPage />
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<AdminPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/assets" element={<AssetsPage />} />
+        <Route path="/lore" element={<LorePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
+  )
 }
 
 export default App
