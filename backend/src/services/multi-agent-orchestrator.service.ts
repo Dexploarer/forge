@@ -23,40 +23,113 @@ import { AISDKService } from './ai-sdk.service'
 // TYPES
 // =====================================================
 
-export interface AgentConfig {
+export class AgentPersona {
+  personality?: string | undefined
+  goals?: string[] | undefined
+  specialties?: string[] | undefined
+  background?: string | undefined
+  relationships?: Record<string, any> | undefined
+
+  constructor(data: {
+    personality?: string | undefined
+    goals?: string[] | undefined
+    specialties?: string[] | undefined
+    background?: string | undefined
+    relationships?: Record<string, any> | undefined
+  } = {}) {
+    this.personality = data.personality
+    this.goals = data.goals
+    this.specialties = data.specialties
+    this.background = data.background
+    this.relationships = data.relationships
+  }
+}
+
+export class AgentConfig {
   id: string
   name: string
   role: string
   systemPrompt: string
-  persona?: {
-    personality?: string
-    goals?: string[]
-    specialties?: string[]
-    background?: string
-    relationships?: Record<string, any>
+  persona?: AgentPersona | undefined
+
+  constructor(data: {
+    id: string
+    name: string
+    role: string
+    systemPrompt: string
+    persona?: AgentPersona | {
+      personality?: string
+      goals?: string[]
+      specialties?: string[]
+      background?: string
+      relationships?: Record<string, any>
+    } | undefined
+  }) {
+    this.id = data.id
+    this.name = data.name
+    this.role = data.role
+    this.systemPrompt = data.systemPrompt
+    this.persona = data.persona instanceof AgentPersona
+      ? data.persona
+      : data.persona ? new AgentPersona(data.persona) : undefined
   }
 }
 
-export interface AgentState extends AgentConfig {
+export class AgentState extends AgentConfig {
   messageCount: number
   lastActive: number | null
+
+  constructor(config: AgentConfig) {
+    super(config)
+    this.messageCount = 0
+    this.lastActive = null
+  }
+
+  recordMessage(): void {
+    this.messageCount++
+    this.lastActive = Date.now()
+  }
 }
 
-export interface ConversationMessage {
+export class ConversationMessage {
   round: number
   agentId: string
   agentName: string
   content: string
   timestamp: number
+
+  constructor(data: {
+    round: number
+    agentId: string
+    agentName: string
+    content: string
+    timestamp: number
+  }) {
+    this.round = data.round
+    this.agentId = data.agentId
+    this.agentName = data.agentName
+    this.content = data.content
+    this.timestamp = data.timestamp
+  }
 }
 
-export interface HandoffDetection {
+export class HandoffDetection {
   shouldEnd: boolean
   nextAgentId: string | null
   reason: string | null
+
+  constructor(data: {
+    shouldEnd: boolean
+    nextAgentId: string | null
+    reason: string | null
+  }) {
+    this.shouldEnd = data.shouldEnd
+    this.nextAgentId = data.nextAgentId
+    this.reason = data.reason
+  }
 }
 
-export interface EmergentContent {
+export class EmergentContent {
   relationships: Array<{
     agents: string[]
     interactionCount: number
@@ -81,47 +154,145 @@ export interface EmergentContent {
       tone: string
       reasoning: string
     }
-  }>
+  }> | undefined
+
+  constructor(data: {
+    relationships?: Array<{
+      agents: string[]
+      interactionCount: number
+      type: string
+      description: string
+    }>
+    questIdeas?: any[]
+    loreFragments?: any[]
+    dialogueSnippets?: Array<{
+      agent: string
+      samples: string[]
+    }>
+    voiceProfiles?: Array<{
+      agentId: string
+      agentName: string
+      recommendation: {
+        name: string
+        description: string
+        gender: 'male' | 'female' | 'neutral'
+        age: 'child' | 'young' | 'adult' | 'elderly'
+        accent?: string
+        tone: string
+        reasoning: string
+      }
+    }>
+  } = {}) {
+    this.relationships = data.relationships || []
+    this.questIdeas = data.questIdeas || []
+    this.loreFragments = data.loreFragments || []
+    this.dialogueSnippets = data.dialogueSnippets || []
+    this.voiceProfiles = data.voiceProfiles
+  }
 }
 
-export interface ValidationResult {
+export class ValidationResult {
   validated: boolean
   confidence: number
   scores?: {
     consistency: number
     authenticity: number
     quality: number
-  }
-  validatorCount?: number
+  } | undefined
+  validatorCount?: number | undefined
   details?: Array<{
     validator: string
     consistency: number
     authenticity: number
     quality: number
     feedback: string
-  }>
-  note?: string
+  }> | undefined
+  note?: string | undefined
+
+  constructor(data: {
+    validated: boolean
+    confidence: number
+    scores?: {
+      consistency: number
+      authenticity: number
+      quality: number
+    }
+    validatorCount?: number
+    details?: Array<{
+      validator: string
+      consistency: number
+      authenticity: number
+      quality: number
+      feedback: string
+    }>
+    note?: string
+  }) {
+    this.validated = data.validated
+    this.confidence = data.confidence
+    this.scores = data.scores
+    this.validatorCount = data.validatorCount
+    this.details = data.details
+    this.note = data.note
+  }
 }
 
-export interface ConversationResult {
+export class ConversationResult {
   rounds: ConversationMessage[]
   emergentContent: EmergentContent
-  validation?: ValidationResult
+  validation?: ValidationResult | undefined
+
+  constructor(data: {
+    rounds?: ConversationMessage[]
+    emergentContent?: EmergentContent
+    validation?: ValidationResult | undefined
+  } = {}) {
+    this.rounds = data.rounds || []
+    this.emergentContent = data.emergentContent || new EmergentContent()
+    this.validation = data.validation
+  }
 }
 
-export interface OrchestratorConfig {
-  maxRounds?: number
-  temperature?: number
-  enableCrossValidation?: boolean
-  model?: string
-  generateVoiceProfiles?: boolean
+export class OrchestratorConfig {
+  maxRounds: number
+  temperature: number
+  enableCrossValidation: boolean
+  model: string
+  generateVoiceProfiles: boolean
+
+  constructor(data: {
+    maxRounds?: number
+    temperature?: number
+    enableCrossValidation?: boolean
+    model?: string
+    generateVoiceProfiles?: boolean
+  } = {}) {
+    this.maxRounds = data.maxRounds || 10
+    this.temperature = data.temperature || 0.8
+    this.enableCrossValidation = data.enableCrossValidation !== false
+    this.model = data.model || ''
+    this.generateVoiceProfiles = data.generateVoiceProfiles !== false
+  }
 }
 
-export interface SharedMemory {
+export class SharedMemory {
   conversationHistory: ConversationMessage[]
   worldState: Record<string, any>
   relationships: Map<string, any>
   generatedContent: any[]
+
+  constructor() {
+    this.conversationHistory = []
+    this.worldState = {}
+    this.relationships = new Map()
+    this.generatedContent = []
+  }
+
+  reset(): void {
+    this.conversationHistory = []
+    this.worldState = {}
+    this.relationships = new Map()
+    this.generatedContent = []
+  }
 }
 
 // =====================================================
@@ -131,33 +302,29 @@ export interface SharedMemory {
 export class MultiAgentOrchestrator {
   private agents: Map<string, AgentState>
   private sharedMemory: SharedMemory
-  private config: Required<OrchestratorConfig>
+  private config: OrchestratorConfig
   private aiService: AISDKService
 
-  constructor(config: OrchestratorConfig = {}) {
+  constructor(config: OrchestratorConfig | {
+    maxRounds?: number
+    temperature?: number
+    enableCrossValidation?: boolean
+    model?: string
+    generateVoiceProfiles?: boolean
+  } = {}) {
+    this.config = config instanceof OrchestratorConfig ? config : new OrchestratorConfig(config)
+
     console.log('[MultiAgentOrchestrator] 🎭 Initializing orchestrator', {
-      maxRounds: config.maxRounds || 10,
-      temperature: config.temperature || 0.8,
-      enableCrossValidation: config.enableCrossValidation !== false,
-      model: config.model || 'default',
-      generateVoiceProfiles: config.generateVoiceProfiles !== false,
+      maxRounds: this.config.maxRounds,
+      temperature: this.config.temperature,
+      enableCrossValidation: this.config.enableCrossValidation,
+      model: this.config.model || 'default',
+      generateVoiceProfiles: this.config.generateVoiceProfiles,
       timestamp: new Date().toISOString(),
     })
 
     this.agents = new Map()
-    this.sharedMemory = {
-      conversationHistory: [],
-      worldState: {},
-      relationships: new Map(),
-      generatedContent: [],
-    }
-    this.config = {
-      maxRounds: config.maxRounds || 10,
-      temperature: config.temperature || 0.8,
-      enableCrossValidation: config.enableCrossValidation !== false,
-      model: config.model || '',
-      generateVoiceProfiles: config.generateVoiceProfiles !== false,
-    }
+    this.sharedMemory = new SharedMemory()
     this.aiService = new AISDKService()
 
     console.log('[MultiAgentOrchestrator] ✅ Orchestrator initialized successfully')
@@ -166,40 +333,44 @@ export class MultiAgentOrchestrator {
   /**
    * Register an agent with the orchestrator
    */
-  registerAgent(agentConfig: AgentConfig): void {
+  registerAgent(agentConfig: AgentConfig | {
+    id: string
+    name: string
+    role: string
+    systemPrompt: string
+    persona?: any
+  }): void {
+    const config = agentConfig instanceof AgentConfig ? agentConfig : new AgentConfig(agentConfig)
+
     console.log('[MultiAgentOrchestrator] 📝 Registering agent', {
-      id: agentConfig.id,
-      name: agentConfig.name,
-      role: agentConfig.role,
-      hasPersona: !!agentConfig.persona,
-      systemPromptLength: agentConfig.systemPrompt?.length || 0,
+      id: config.id,
+      name: config.name,
+      role: config.role,
+      hasPersona: !!config.persona,
+      systemPromptLength: config.systemPrompt?.length || 0,
     })
 
-    if (!agentConfig.id || !agentConfig.name || !agentConfig.role) {
+    if (!config.id || !config.name || !config.role) {
       console.error('[MultiAgentOrchestrator] ❌ Agent registration failed - missing required fields', {
-        hasId: !!agentConfig.id,
-        hasName: !!agentConfig.name,
-        hasRole: !!agentConfig.role,
+        hasId: !!config.id,
+        hasName: !!config.name,
+        hasRole: !!config.role,
       })
       throw new Error('Agent must have id, name, and role')
     }
 
-    if (!agentConfig.systemPrompt) {
+    if (!config.systemPrompt) {
       console.error('[MultiAgentOrchestrator] ❌ Agent registration failed - missing systemPrompt', {
-        agentName: agentConfig.name,
+        agentName: config.name,
       })
-      throw new Error(`Agent ${agentConfig.name} must have a systemPrompt`)
+      throw new Error(`Agent ${config.name} must have a systemPrompt`)
     }
 
-    this.agents.set(agentConfig.id, {
-      ...agentConfig,
-      messageCount: 0,
-      lastActive: null,
-    })
+    this.agents.set(config.id, new AgentState(config))
 
     console.log('[MultiAgentOrchestrator] ✅ Agent registered successfully', {
-      agentId: agentConfig.id,
-      agentName: agentConfig.name,
+      agentId: config.id,
+      agentName: config.name,
       totalAgents: this.agents.size,
     })
   }
@@ -283,15 +454,7 @@ export class MultiAgentOrchestrator {
       throw new Error('Initial prompt is required')
     }
 
-    const result: ConversationResult = {
-      rounds: [],
-      emergentContent: {
-        relationships: [],
-        questIdeas: [],
-        loreFragments: [],
-        dialogueSnippets: [],
-      },
-    }
+    const result = new ConversationResult()
 
     let currentContext = initialPrompt
     let currentAgentId = startingAgentId
@@ -345,18 +508,17 @@ export class MultiAgentOrchestrator {
       })
 
       // Record in shared memory
-      const message: ConversationMessage = {
+      const message = new ConversationMessage({
         round,
         agentId: agent.id,
         agentName: agent.name,
         content: response.text,
         timestamp: Date.now(),
-      }
+      })
       this.sharedMemory.conversationHistory.push(message)
 
       // Update agent stats
-      agent.messageCount++
-      agent.lastActive = Date.now()
+      agent.recordMessage()
 
       // Add to results
       result.rounds.push(message)
@@ -523,11 +685,11 @@ YOUR RESPONSE:`
     const handoffMatch = response.match(/\[HANDOFF(?::?\s*([^\]]+))?\]/)
     const endMatch = response.match(/\[END_CONVERSATION\]/)
 
-    return {
+    return new HandoffDetection({
       shouldEnd: !!endMatch,
       nextAgentId: null, // Let orchestrator select next agent
       reason: handoffMatch ? handoffMatch[1]! : null,
-    }
+    })
   }
 
   /**
@@ -535,12 +697,7 @@ YOUR RESPONSE:`
    * Identifies relationships, quest ideas, lore fragments
    */
   private extractEmergentContent(rounds: ConversationMessage[]): EmergentContent {
-    const content: EmergentContent = {
-      relationships: [],
-      questIdeas: [],
-      loreFragments: [],
-      dialogueSnippets: [],
-    }
+    const content = new EmergentContent()
 
     // Analyze agent interactions
     const agentPairs = new Map<string, { agents: string[]; interactions: any[] }>()
@@ -603,11 +760,11 @@ YOUR RESPONSE:`
    */
   private async crossValidate(content: EmergentContent): Promise<ValidationResult> {
     if (this.agents.size < 2) {
-      return {
+      return new ValidationResult({
         validated: true,
         confidence: 1.0,
         note: 'Insufficient agents for cross-validation',
-      }
+      })
     }
 
     const validators = Array.from(this.agents.values()).slice(0, 3) // Use up to 3 validators
@@ -666,7 +823,7 @@ Brief explanation of any issues found.`
       .map((r) => (r as PromiseFulfilledResult<any>).value)
 
     if (validResults.length === 0) {
-      return { validated: false, confidence: 0, note: 'All validations failed' }
+      return new ValidationResult({ validated: false, confidence: 0, note: 'All validations failed' })
     }
 
     // Calculate average scores
@@ -676,7 +833,7 @@ Brief explanation of any issues found.`
       validResults.reduce((sum, r) => sum + r.authenticity, 0) / validResults.length
     const avgQuality = validResults.reduce((sum, r) => sum + r.quality, 0) / validResults.length
 
-    return {
+    return new ValidationResult({
       validated: avgConsistency >= 7 && avgAuthenticity >= 7,
       confidence: (avgConsistency + avgAuthenticity + avgQuality) / 30,
       scores: {
@@ -686,7 +843,7 @@ Brief explanation of any issues found.`
       },
       validatorCount: validResults.length,
       details: validResults,
-    }
+    })
   }
 
   /**
@@ -747,12 +904,7 @@ Brief explanation of any issues found.`
    * Clear shared memory and reset orchestrator state
    */
   reset(): void {
-    this.sharedMemory = {
-      conversationHistory: [],
-      worldState: {},
-      relationships: new Map(),
-      generatedContent: [],
-    }
+    this.sharedMemory.reset()
 
     // Reset agent stats
     for (const agent of this.agents.values()) {

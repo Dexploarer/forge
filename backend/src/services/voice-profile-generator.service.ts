@@ -15,7 +15,7 @@ import { AISDKService } from './ai-sdk.service'
 // TYPES
 // =====================================================
 
-export interface NPCCharacteristics {
+export class NPCCharacteristics {
   name: string
   personality: string
   backstory?: string | undefined
@@ -29,20 +29,92 @@ export interface NPCCharacteristics {
     build?: string
     features?: string[]
   } | undefined
+
+  constructor(data: {
+    name: string
+    personality: string
+    backstory?: string | undefined
+    race?: string | undefined
+    class?: string | undefined
+    age?: number | undefined
+    gender?: string | undefined
+    behavior?: string | undefined
+    appearance?: {
+      height?: string
+      build?: string
+      features?: string[]
+    } | undefined
+  }) {
+    this.name = data.name
+    this.personality = data.personality
+    this.backstory = data.backstory
+    this.race = data.race
+    this.class = data.class
+    this.age = data.age
+    this.gender = data.gender
+    this.behavior = data.behavior
+    this.appearance = data.appearance
+  }
+
+  static fromNPC(npc: {
+    name: string
+    personality?: string | null
+    backstory?: string | null
+    race?: string | null
+    class?: string | null
+    age?: number | null
+    gender?: string | null
+    behavior?: string | null
+  }): NPCCharacteristics {
+    return new NPCCharacteristics({
+      name: npc.name,
+      personality: npc.personality || 'Unknown personality',
+      backstory: npc.backstory || undefined,
+      race: npc.race || undefined,
+      class: npc.class || undefined,
+      age: npc.age || undefined,
+      gender: npc.gender || undefined,
+      behavior: npc.behavior || undefined,
+    })
+  }
 }
 
-export interface VoiceProfileRecommendation {
+export class VoiceProfileRecommendation {
   name: string
   description: string
   gender: 'male' | 'female' | 'neutral'
   age: 'child' | 'young' | 'adult' | 'elderly'
-  accent?: string
+  accent?: string | undefined
   tone: string
   reasoning: string
   serviceSettings: {
     stability?: number
     clarity?: number
     style?: number
+  }
+
+  constructor(data: {
+    name: string
+    description: string
+    gender: 'male' | 'female' | 'neutral'
+    age: 'child' | 'young' | 'adult' | 'elderly'
+    accent?: string | undefined
+    tone: string
+    reasoning: string
+    serviceSettings: {
+      stability?: number
+      clarity?: number
+      style?: number
+    }
+  }) {
+    this.name = data.name
+    this.description = data.description
+    this.gender = data.gender
+    this.age = data.age
+    this.accent = data.accent
+    this.tone = data.tone
+    this.reasoning = data.reasoning
+    this.serviceSettings = data.serviceSettings
   }
 }
 
@@ -138,7 +210,7 @@ export class VoiceProfileGeneratorService {
         elapsedTimeSec: (elapsedTime / 1000).toFixed(2),
       })
 
-      return result.object as VoiceProfileRecommendation
+      return new VoiceProfileRecommendation(result.object as any)
     } catch (error) {
       const elapsedTime = Date.now() - startTime
 
@@ -163,7 +235,7 @@ export class VoiceProfileGeneratorService {
         age: fallbackResult.age,
       })
 
-      return fallbackResult
+      return new VoiceProfileRecommendation(fallbackResult)
     }
   }
 
@@ -391,7 +463,7 @@ Provide a descriptive name for the voice profile and explain your reasoning.`
       tone = 'cold and precise'
     }
 
-    return {
+    return new VoiceProfileRecommendation({
       name: `${npc.name}'s Voice`,
       description: `Voice profile for ${npc.name}, a ${npc.race || 'character'} ${npc.class || ''}`.trim(),
       gender,
@@ -403,7 +475,7 @@ Provide a descriptive name for the voice profile and explain your reasoning.`
         clarity: 0.75,
         style: 0.5,
       },
-    }
+    })
   }
 
   /**

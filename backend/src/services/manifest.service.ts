@@ -8,7 +8,6 @@
 import { db } from '@/database/db'
 import { previewManifests } from '@/database/schema'
 import { eq, and, isNull } from 'drizzle-orm'
-import { AppError } from '@/utils/errors'
 import { ContentEmbedderService } from './content-embedder.service'
 
 export interface ManifestItem {
@@ -61,7 +60,7 @@ export class ManifestService {
       return null
     }
 
-    return Array.isArray(manifest.content) ? manifest.content : [manifest.content]
+    return (Array.isArray(manifest.content) ? manifest.content : [manifest.content]) as ManifestItem[]
   }
 
   /**

@@ -21,28 +21,80 @@ import { env } from '../config/env'
 // TYPE DEFINITIONS
 // =====================================================
 
-export interface SoundEffectOptions {
+export class SoundEffectOptions {
   text: string
-  durationSeconds?: number | null
-  promptInfluence?: number
-  loop?: boolean
+  durationSeconds?: number | null | undefined
+  promptInfluence?: number | undefined
+  loop?: boolean | undefined
+
+  constructor(data: {
+    text: string
+    durationSeconds?: number | null | undefined
+    promptInfluence?: number | undefined
+    loop?: boolean | undefined
+  }) {
+    this.text = data.text
+    this.durationSeconds = data.durationSeconds
+    this.promptInfluence = data.promptInfluence
+    this.loop = data.loop
+  }
 }
 
-export interface SoundEffectBatchResult {
-  effects: Array<{
+export class SoundEffectBatchItem {
+  index: number
+  success: boolean
+  audioBuffer?: Buffer | undefined
+  text: string
+  size?: number | undefined
+  error?: string | undefined
+
+  constructor(data: {
     index: number
     success: boolean
-    audioBuffer?: Buffer
+    audioBuffer?: Buffer | undefined
     text: string
-    size?: number
-    error?: string
-  }>
-  successful: number
-  total: number
+    size?: number | undefined
+    error?: string | undefined
+  }) {
+    this.index = data.index
+    this.success = data.success
+    this.audioBuffer = data.audioBuffer
+    this.text = data.text
+    this.size = data.size
+    this.error = data.error
+  }
 }
 
-export interface SoundEffectsServiceConfig {
-  apiKey?: string
+export class SoundEffectBatchResult {
+  effects: SoundEffectBatchItem[]
+  successful: number
+  total: number
+
+  constructor(data: {
+    effects: SoundEffectBatchItem[]
+    successful: number
+    total: number
+  }) {
+    this.effects = data.effects
+    this.successful = data.successful
+    this.total = data.total
+  }
+
+  getSuccessRate(): number {
+    return (this.successful / this.total) * 100
+  }
+
+  getFailedEffects(): SoundEffectBatchItem[] {
+    return this.effects.filter(e => !e.success)
+  }
+}
+
+export class SoundEffectsServiceConfig {
+  apiKey?: string | undefined
+
+  constructor(data: { apiKey?: string | undefined } = {}) {
+    this.apiKey = data.apiKey
+  }
 }
 
 // =====================================================
@@ -220,13 +272,13 @@ export class SoundEffectsService {
         const audioBuffer = await this.generateSoundEffect(options)
 
         const effectElapsed = Date.now() - effectStartTime
-        results.push({
+        results.push(new SoundEffectBatchItem({
           index,
           success: true,
           audioBuffer,
           text: effect.text,
           size: audioBuffer.length,
-        })
+        }))
 
         successful++
 
@@ -248,12 +300,12 @@ export class SoundEffectsService {
           elapsedMs: effectElapsed,
         })
 
-        results.push({
+        results.push(new SoundEffectBatchItem({
           index,
           success: false,
           error: (error as Error).message,
           text: effect.text,
-        })
+        }))
       }
     }
 
@@ -270,11 +322,11 @@ export class SoundEffectsService {
       avgTimePerEffectMs: Math.round(totalElapsed / effects.length),
     })
 
-    return {
+    return new SoundEffectBatchResult({
       effects: results,
       successful,
       total: effects.length,
-    }
+    })
   }
 
   /**

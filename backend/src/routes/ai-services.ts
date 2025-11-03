@@ -11,7 +11,6 @@ import { openaiService } from '../services/openai.service'
 import { meshyService } from '../services/meshy.service'
 import { embeddingsService } from '../services/embeddings.service'
 import { minioStorageService } from '../services/minio.service'
-import { env } from '../config/env'
 
 const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
