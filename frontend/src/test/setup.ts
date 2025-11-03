@@ -40,10 +40,13 @@ beforeAll(() => {
 
   // Mock IntersectionObserver (used by lazy loading)
   global.IntersectionObserver = class IntersectionObserver {
-    constructor(
-      public callback: IntersectionObserverCallback,
-      public options?: IntersectionObserverInit
-    ) {}
+    callback: IntersectionObserverCallback
+    options?: IntersectionObserverInit
+
+    constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+      this.callback = callback
+      this.options = options
+    }
     observe = vi.fn()
     unobserve = vi.fn()
     disconnect = vi.fn()
@@ -55,7 +58,11 @@ beforeAll(() => {
 
   // Mock ResizeObserver (used by responsive components)
   global.ResizeObserver = class ResizeObserver {
-    constructor(public callback: ResizeObserverCallback) {}
+    callback: ResizeObserverCallback
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback
+    }
     observe = vi.fn()
     unobserve = vi.fn()
     disconnect = vi.fn()
@@ -64,11 +71,11 @@ beforeAll(() => {
   // Mock localStorage
   if (typeof window !== 'undefined') {
     const localStorageMock = {
-      getItem: vi.fn((key: string) => null),
-      setItem: vi.fn((key: string, value: string) => {}),
-      removeItem: vi.fn((key: string) => {}),
+      getItem: vi.fn((_key: string) => null),
+      setItem: vi.fn((_key: string, _value: string) => {}),
+      removeItem: vi.fn((_key: string) => {}),
       clear: vi.fn(() => {}),
-      key: vi.fn((index: number) => null),
+      key: vi.fn((_index: number) => null),
       length: 0,
     }
     Object.defineProperty(window, 'localStorage', {
@@ -78,11 +85,11 @@ beforeAll(() => {
 
     // Mock sessionStorage
     const sessionStorageMock = {
-      getItem: vi.fn((key: string) => null),
-      setItem: vi.fn((key: string, value: string) => {}),
-      removeItem: vi.fn((key: string) => {}),
+      getItem: vi.fn((_key: string) => null),
+      setItem: vi.fn((_key: string, _value: string) => {}),
+      removeItem: vi.fn((_key: string) => {}),
       clear: vi.fn(() => {}),
-      key: vi.fn((index: number) => null),
+      key: vi.fn((_index: number) => null),
       length: 0,
     }
     Object.defineProperty(window, 'sessionStorage', {

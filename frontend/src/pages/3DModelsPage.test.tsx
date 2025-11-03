@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import ThreeDModelsPage from './3DModelsPage'
@@ -87,18 +87,6 @@ const mockGeneratedModel = {
     },
     createdAt: '2024-01-05T00:00:00Z',
     updatedAt: '2024-01-05T00:00:00Z',
-  },
-}
-
-const mockCompletedModel = {
-  ...mockGeneratedModel.asset,
-  status: 'published' as const,
-  thumbnailUrl: 'https://example.com/helmet-thumb.jpg',
-  fileUrl: 'https://example.com/helmet.glb',
-  metadata: {
-    ...mockGeneratedModel.asset.metadata,
-    polyCount: 12000,
-    dimensions: '0.4 x 0.3 x 0.4m',
   },
 }
 

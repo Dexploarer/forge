@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import SoundEffectsPage from './SoundEffectsPage'
@@ -463,7 +463,6 @@ describe('SoundEffectsPage - Integration Tests', () => {
 
   describe('View Mode', () => {
     test('switches between grid and list view', async () => {
-      const user = userEvent.setup()
       renderPage()
 
       await waitFor(() => {
@@ -472,7 +471,6 @@ describe('SoundEffectsPage - Integration Tests', () => {
 
       // Find view toggle buttons (Grid and List icons)
       const buttons = screen.getAllByRole('button')
-      const listButton = buttons.find(btn => btn.querySelector('svg'))
 
       // Click to switch views (implementation may vary)
       // The actual view change is cosmetic (CSS grid vs flex)

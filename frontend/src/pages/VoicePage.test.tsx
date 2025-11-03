@@ -4,11 +4,11 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import VoicePage from './VoicePage'
-import { mockFetchSuccess, mockFetchError } from '../test/setup'
+import { mockFetchError } from '../test/setup'
 
 // Mock API responses
 const mockVoiceProfiles = {
