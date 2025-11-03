@@ -21,7 +21,7 @@ const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
           analytics: z.object({
             assetId: z.string().uuid(),
             assetName: z.string(),
-            type: z.enum(['model', 'texture', 'audio']),
+            type: z.enum(['model', 'texture', 'audio', 'image']),
             status: z.enum(['draft', 'processing', 'published', 'failed']),
             visibility: z.enum(['private', 'public']),
             fileSize: z.number().nullable(),
@@ -119,6 +119,7 @@ const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
               model: z.number(),
               texture: z.number(),
               audio: z.number(),
+              image: z.number(),
             }),
             assetsByStatus: z.object({
               draft: z.number(),
@@ -177,6 +178,7 @@ const analyticsRoutes: FastifyPluginAsync = async (fastify) => {
       model: 0,
       texture: 0,
       audio: 0,
+      image: 0,
     }
     typeResults.forEach(row => {
       assetsByType[row.type] = Number(row.count)

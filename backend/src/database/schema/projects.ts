@@ -22,6 +22,9 @@ export const projects = pgTable('projects', {
   // Project owner (must be a team member)
   ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
 
+  // Project status
+  status: varchar('status', { length: 50 }).default('active'),
+
   // Project settings (flexible JSON)
   settings: jsonb('settings').$type<{
     visibility?: 'private' | 'team' | 'public'

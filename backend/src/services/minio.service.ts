@@ -20,8 +20,19 @@ export class MinioStorageService {
   }
 
   private initialize() {
+    console.log('[MinioService] 🚀 Initializing MinIO storage service', {
+      hasEndpoint: !!env.MINIO_ENDPOINT,
+      hasRootUser: !!env.MINIO_ROOT_USER,
+      hasRootPassword: !!env.MINIO_ROOT_PASSWORD,
+      publicHost: this.publicHost,
+    })
+
     if (!env.MINIO_ENDPOINT || !env.MINIO_ROOT_USER || !env.MINIO_ROOT_PASSWORD) {
-      console.warn('⚠️  MinIO not configured - file uploads will fail')
+      console.warn('[MinioService] ⚠️  MinIO not configured - file uploads will fail', {
+        missingEndpoint: !env.MINIO_ENDPOINT,
+        missingUser: !env.MINIO_ROOT_USER,
+        missingPassword: !env.MINIO_ROOT_PASSWORD,
+      })
       return
     }
 
@@ -30,6 +41,12 @@ export class MinioStorageService {
       let endpoint = env.MINIO_ENDPOINT
       endpoint = endpoint.replace(/^https?:\/\//, '')
 
+      console.log('[MinioService] 🔧 Creating MinIO client', {
+        endpoint,
+        port: env.MINIO_PORT || 9000,
+        useSSL: env.MINIO_USE_SSL || false,
+      })
+
       this.client = new Minio.Client({
         endPoint: endpoint,
         port: env.MINIO_PORT || 9000,
@@ -37,9 +54,20 @@ export class MinioStorageService {
         accessKey: env.MINIO_ROOT_USER,
         secretKey: env.MINIO_ROOT_PASSWORD,
       })
-      console.log(`✅ MinIO client initialized (${endpoint}:${env.MINIO_PORT || 9000}, SSL: ${env.MINIO_USE_SSL || false})`)
+
+      console.log(`[MinioService] ✅ MinIO client initialized successfully`, {
+        endpoint,
+        port: env.MINIO_PORT || 9000,
+        useSSL: env.MINIO_USE_SSL || false,
+        publicHost: this.publicHost,
+      })
     } catch (error) {
-      console.error('❌ Failed to initialize MinIO client:', error)
+      console.error('[MinioService] ❌ Failed to initialize MinIO client', {
+        error: (error as Error).message,
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        endpoint: env.MINIO_ENDPOINT,
+      })
       this.client = null
     }
   }
@@ -87,7 +115,18 @@ export class MinioStorageService {
     originalFilename: string,
     bucketOverride?: string
   ): Promise<{ path: string; url: string; filename: string; bucket: string }> {
+    const startTime = Date.now()
+
+    console.log('[MinioService] 📤 Starting file upload', {
+      originalFilename,
+      mimetype,
+      sizeBytes: buffer.length,
+      sizeKB: (buffer.length / 1024).toFixed(2),
+      bucketOverride,
+    })
+
     if (!this.client) {
+      console.error('[MinioService] ❌ Upload failed - client not initialized')
       throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
     }
 
@@ -95,14 +134,34 @@ export class MinioStorageService {
     const filename = `${randomUUID()}.${ext}`
     const bucket = bucketOverride || this.getBucketForMimeType(mimetype)
 
+    console.log('[MinioService] 📁 Determined upload target', {
+      bucket,
+      filename,
+      ext,
+      autoBucket: !bucketOverride,
+    })
+
     try {
       // Ensure bucket exists
+      console.log('[MinioService] 🔍 Checking if bucket exists', { bucket })
       const exists = await this.client.bucketExists(bucket)
+
       if (!exists) {
+        console.log('[MinioService] 🆕 Creating new bucket', { bucket, region: 'us-east-1' })
         await this.client.makeBucket(bucket, 'us-east-1')
+        console.log('[MinioService] ✅ Bucket created', { bucket })
+      } else {
+        console.log('[MinioService] ✓ Bucket already exists', { bucket })
       }
 
       // Upload file
+      console.log('[MinioService] 📡 Uploading file to MinIO', {
+        bucket,
+        filename,
+        size: buffer.length,
+        contentType: mimetype,
+      })
+
       await this.client.putObject(bucket, filename, buffer, buffer.length, {
         'Content-Type': mimetype,
       })
@@ -112,6 +171,19 @@ export class MinioStorageService {
       const protocol = useSSL ? 'https' : 'https' // Always use HTTPS for public URLs
       const url = `${protocol}://${this.publicHost}/${bucket}/${filename}`
 
+      const elapsedTime = Date.now() - startTime
+
+      console.log('[MinioService] ✅ File uploaded successfully', {
+        bucket,
+        filename,
+        path: `${bucket}/${filename}`,
+        url,
+        sizeBytes: buffer.length,
+        sizeKB: (buffer.length / 1024).toFixed(2),
+        elapsedTimeMs: elapsedTime,
+        uploadSpeedKBps: ((buffer.length / 1024) / (elapsedTime / 1000)).toFixed(2),
+      })
+
       return {
         path: `${bucket}/${filename}`,
         url,
@@ -119,7 +191,18 @@ export class MinioStorageService {
         bucket,
       }
     } catch (error) {
-      console.error('MinIO upload error:', error)
+      const elapsedTime = Date.now() - startTime
+
+      console.error('[MinioService] ❌ Upload failed', {
+        bucket,
+        filename,
+        originalFilename,
+        error: (error as Error).message,
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        elapsedTimeMs: elapsedTime,
+      })
+
       throw new AppError(
         `Failed to upload file to MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
@@ -132,15 +215,42 @@ export class MinioStorageService {
    * Delete a file from MinIO
    */
   async deleteFile(bucket: string, filename: string): Promise<void> {
+    const startTime = Date.now()
+
+    console.log('[MinioService] 🗑️  Deleting file', {
+      bucket,
+      filename,
+      path: `${bucket}/${filename}`,
+    })
+
     if (!this.client) {
+      console.error('[MinioService] ❌ Delete failed - client not initialized')
       throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
     }
 
     try {
       await this.client.removeObject(bucket, filename)
-      console.log(`Deleted file: ${bucket}/${filename}`)
+
+      const elapsedTime = Date.now() - startTime
+
+      console.log('[MinioService] ✅ File deleted successfully', {
+        bucket,
+        filename,
+        path: `${bucket}/${filename}`,
+        elapsedTimeMs: elapsedTime,
+      })
     } catch (error) {
-      console.error('MinIO delete error:', error)
+      const elapsedTime = Date.now() - startTime
+
+      console.error('[MinioService] ❌ Delete failed', {
+        bucket,
+        filename,
+        error: (error as Error).message,
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        elapsedTimeMs: elapsedTime,
+      })
+
       throw new AppError(
         `Failed to delete file from MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
@@ -245,7 +355,16 @@ export class MinioStorageService {
    * Download file as buffer
    */
   async downloadFile(bucket: string, filename: string): Promise<Buffer> {
+    const startTime = Date.now()
+
+    console.log('[MinioService] 📥 Downloading file', {
+      bucket,
+      filename,
+      path: `${bucket}/${filename}`,
+    })
+
     if (!this.client) {
+      console.error('[MinioService] ❌ Download failed - client not initialized')
       throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
     }
 
@@ -253,13 +372,56 @@ export class MinioStorageService {
       const stream = await this.client.getObject(bucket, filename)
       const chunks: Buffer[] = []
 
+      console.log('[MinioService] 📡 Receiving file stream')
+
       return new Promise((resolve, reject) => {
-        stream.on('data', (chunk) => chunks.push(chunk))
-        stream.on('error', reject)
-        stream.on('end', () => resolve(Buffer.concat(chunks)))
+        stream.on('data', (chunk) => {
+          chunks.push(chunk)
+          if (chunks.length % 100 === 0) {
+            console.log('[MinioService] 📦 Downloaded chunks', {
+              chunkCount: chunks.length,
+              totalBytes: chunks.reduce((sum, c) => sum + c.length, 0),
+            })
+          }
+        })
+        stream.on('error', (error) => {
+          console.error('[MinioService] ❌ Stream error during download', {
+            bucket,
+            filename,
+            error: error.message,
+          })
+          reject(error)
+        })
+        stream.on('end', () => {
+          const buffer = Buffer.concat(chunks)
+          const elapsedTime = Date.now() - startTime
+
+          console.log('[MinioService] ✅ File downloaded successfully', {
+            bucket,
+            filename,
+            sizeBytes: buffer.length,
+            sizeKB: (buffer.length / 1024).toFixed(2),
+            sizeMB: (buffer.length / 1024 / 1024).toFixed(2),
+            chunkCount: chunks.length,
+            elapsedTimeMs: elapsedTime,
+            downloadSpeedKBps: ((buffer.length / 1024) / (elapsedTime / 1000)).toFixed(2),
+          })
+
+          resolve(buffer)
+        })
       })
     } catch (error) {
-      console.error('MinIO download error:', error)
+      const elapsedTime = Date.now() - startTime
+
+      console.error('[MinioService] ❌ Download failed', {
+        bucket,
+        filename,
+        error: (error as Error).message,
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        elapsedTimeMs: elapsedTime,
+      })
+
       throw new AppError(
         `Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,

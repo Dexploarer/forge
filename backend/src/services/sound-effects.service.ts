@@ -55,16 +55,30 @@ export class SoundEffectsService {
   constructor(config: SoundEffectsServiceConfig = {}) {
     const apiKey = config.apiKey || env.ELEVENLABS_API_KEY
 
+    console.log('[SoundEffectsService] Initializing service', {
+      hasConfigKey: !!config.apiKey,
+      hasEnvKey: !!env.ELEVENLABS_API_KEY,
+      keySource: config.apiKey ? 'user' : 'env',
+    })
+
     if (!apiKey) {
       console.warn('[SoundEffectsService] ElevenLabs API key not found - service unavailable')
       this.client = null
     } else {
-      this.client = new ElevenLabsClient({
-        apiKey: apiKey,
-      })
-      console.log(
-        `[SoundEffectsService] ElevenLabs Sound Effects client initialized ${config.apiKey ? '(user key)' : '(env var)'}`
-      )
+      try {
+        this.client = new ElevenLabsClient({
+          apiKey: apiKey,
+        })
+        console.log(
+          `[SoundEffectsService] ✅ ElevenLabs Sound Effects client initialized ${config.apiKey ? '(user key)' : '(env var)'}`
+        )
+      } catch (error) {
+        console.error('[SoundEffectsService] ❌ Failed to initialize client', {
+          error: (error as Error).message,
+          stack: (error as Error).stack,
+        })
+        this.client = null
+      }
     }
   }
 
@@ -79,20 +93,37 @@ export class SoundEffectsService {
    * Generate single sound effect from text description
    */
   async generateSoundEffect(options: SoundEffectOptions): Promise<Buffer> {
+    const startTime = Date.now()
+
+    console.log('[SoundEffectsService] 🎵 Starting sound effect generation', {
+      textPreview: options.text.substring(0, 100),
+      textLength: options.text.length,
+      duration: options.durationSeconds || 'auto',
+      promptInfluence: options.promptInfluence || 0.3,
+      loop: options.loop || false,
+      timestamp: new Date().toISOString(),
+    })
+
     if (!this.isAvailable() || !this.client) {
+      console.error('[SoundEffectsService] ❌ Service unavailable', {
+        isAvailable: this.isAvailable(),
+        hasClient: !!this.client,
+      })
       throw new Error('Sound effects service not available - API key not configured')
     }
 
     const { text, durationSeconds = null, promptInfluence = 0.3, loop = false } = options
 
-    console.log('[SoundEffectsService] Generating sound effect', {
-      text: text.substring(0, 50),
-      duration: durationSeconds || 'auto',
-      promptInfluence,
-      loop,
-    })
-
     try {
+      console.log('[SoundEffectsService] 📡 Calling ElevenLabs API', {
+        endpoint: 'textToSoundEffects.convert',
+        params: {
+          text: text.substring(0, 50) + '...',
+          duration_seconds: durationSeconds,
+          prompt_influence: promptInfluence,
+        }
+      })
+
       // Call ElevenLabs sound generation API
       const audioStream: any = await (this.client as any).textToSoundEffects.convert({
         text,
@@ -100,23 +131,44 @@ export class SoundEffectsService {
         prompt_influence: promptInfluence,
       })
 
+      console.log('[SoundEffectsService] 📥 Receiving audio stream from ElevenLabs')
+
       // Convert stream to buffer
       const chunks: Buffer[] = []
+      let chunkCount = 0
       for await (const chunk of audioStream) {
         chunks.push(Buffer.from(chunk))
+        chunkCount++
+        if (chunkCount % 10 === 0) {
+          console.log('[SoundEffectsService] 📦 Received chunk', {
+            chunkNumber: chunkCount,
+            totalBytes: chunks.reduce((sum, c) => sum + c.length, 0),
+          })
+        }
       }
       const audioBuffer = Buffer.concat(chunks)
 
-      console.log('[SoundEffectsService] Sound effect generated', {
+      const elapsedTime = Date.now() - startTime
+      console.log('[SoundEffectsService] ✅ Sound effect generated successfully', {
         size: audioBuffer.length,
+        sizeKB: (audioBuffer.length / 1024).toFixed(2),
+        chunks: chunkCount,
         duration: durationSeconds || 'auto',
+        elapsedTimeMs: elapsedTime,
+        elapsedTimeSec: (elapsedTime / 1000).toFixed(2),
       })
 
       return audioBuffer
     } catch (error) {
-      console.error('[SoundEffectsService] Sound effect generation failed', {
+      const elapsedTime = Date.now() - startTime
+      console.error('[SoundEffectsService] ❌ Sound effect generation failed', {
         error: (error as Error).message,
-        text: text.substring(0, 50),
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        textPreview: text.substring(0, 50),
+        duration: durationSeconds,
+        promptInfluence,
+        elapsedTimeMs: elapsedTime,
       })
       throw error
     }
@@ -126,16 +178,30 @@ export class SoundEffectsService {
    * Batch generate multiple sound effects
    */
   async generateSoundEffectBatch(effects: SoundEffectOptions[]): Promise<SoundEffectBatchResult> {
+    const startTime = Date.now()
+
+    console.log('[SoundEffectsService] 🎵🎵🎵 Starting batch sound effect generation', {
+      totalEffects: effects.length,
+      timestamp: new Date().toISOString(),
+    })
+
     if (!this.isAvailable()) {
+      console.error('[SoundEffectsService] ❌ Batch generation failed - service unavailable')
       throw new Error('Sound effects service not available - API key not configured')
     }
-
-    console.log(`[SoundEffectsService] Batch generating ${effects.length} sound effects`)
 
     const results: SoundEffectBatchResult['effects'] = []
     let successful = 0
 
     for (const [index, effect] of effects.entries()) {
+      const effectStartTime = Date.now()
+
+      console.log(`[SoundEffectsService] 🎯 Processing effect ${index + 1}/${effects.length}`, {
+        index,
+        textPreview: effect.text.substring(0, 50),
+        duration: effect.durationSeconds || 'auto',
+      })
+
       try {
         const options: SoundEffectOptions = {
           text: effect.text,
@@ -153,6 +219,7 @@ export class SoundEffectsService {
 
         const audioBuffer = await this.generateSoundEffect(options)
 
+        const effectElapsed = Date.now() - effectStartTime
         results.push({
           index,
           success: true,
@@ -162,10 +229,23 @@ export class SoundEffectsService {
         })
 
         successful++
+
+        console.log(`[SoundEffectsService] ✅ Effect ${index + 1} generated successfully`, {
+          index,
+          size: audioBuffer.length,
+          elapsedMs: effectElapsed,
+          successRate: `${successful}/${index + 1}`,
+        })
       } catch (error) {
-        console.error(`[SoundEffectsService] Failed to generate sound effect ${index}`, {
+        const effectElapsed = Date.now() - effectStartTime
+
+        console.error(`[SoundEffectsService] ❌ Failed to generate effect ${index + 1}`, {
+          index,
           error: (error as Error).message,
-          text: effect.text.substring(0, 50),
+          errorName: (error as Error).name,
+          stack: (error as Error).stack,
+          textPreview: effect.text.substring(0, 50),
+          elapsedMs: effectElapsed,
         })
 
         results.push({
@@ -177,9 +257,18 @@ export class SoundEffectsService {
       }
     }
 
-    console.log(
-      `[SoundEffectsService] Batch generation complete: ${successful}/${effects.length}`
-    )
+    const totalElapsed = Date.now() - startTime
+    const successRate = ((successful / effects.length) * 100).toFixed(1)
+
+    console.log('[SoundEffectsService] 📊 Batch generation complete', {
+      successful,
+      failed: effects.length - successful,
+      total: effects.length,
+      successRate: `${successRate}%`,
+      totalElapsedMs: totalElapsed,
+      totalElapsedSec: (totalElapsed / 1000).toFixed(2),
+      avgTimePerEffectMs: Math.round(totalElapsed / effects.length),
+    })
 
     return {
       effects: results,

@@ -582,8 +582,12 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ForbiddenError('Only the owner or admin can delete this track')
     }
 
+    // Delete audio file from MinIO if exists
     if (track.audioUrl) {
-      await minioStorageService.deleteFile(track.audioUrl)
+      const metadata = track.metadata as Record<string, any>
+      if (metadata?.minioPath) {
+        await minioStorageService.deleteFileByPath(metadata.minioPath)
+      }
     }
 
     await fastify.db.delete(musicTracks).where(eq(musicTracks.id, id))

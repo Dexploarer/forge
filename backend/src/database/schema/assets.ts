@@ -25,6 +25,7 @@ export const assets = pgTable('assets', {
 
   // File Information
   fileUrl: text('file_url'),
+  thumbnailUrl: text('thumbnail_url'),
   fileSize: bigint('file_size', { mode: 'number' }),
   mimeType: varchar('mime_type', { length: 100 }),
 

@@ -83,14 +83,40 @@ export class VoiceProfileGeneratorService {
     npc: NPCCharacteristics,
     model: string = 'gpt-4o-mini'
   ): Promise<VoiceProfileRecommendation> {
+    const startTime = Date.now()
+
+    console.log('[VoiceProfileGenerator] 🎤 Starting voice profile generation', {
+      npcName: npc.name,
+      model,
+      hasBackstory: !!npc.backstory,
+      hasRace: !!npc.race,
+      hasClass: !!npc.class,
+      hasAge: !!npc.age,
+      timestamp: new Date().toISOString(),
+    })
+
     const prompt = this.buildVoiceAnalysisPrompt(npc)
 
+    console.log('[VoiceProfileGenerator] 📝 Built analysis prompt', {
+      npcName: npc.name,
+      promptLength: prompt.length,
+      promptPreview: prompt.substring(0, 200) + '...',
+    })
+
     try {
+      console.log('[VoiceProfileGenerator] 🤖 Getting AI model', {
+        taskId: 'npc_voice_analysis',
+        model,
+        provider: 'openai',
+      })
+
       const aiModel = await this.aiService.getConfiguredModel(
         'npc_voice_analysis',
         model,
         'openai'
       )
+
+      console.log('[VoiceProfileGenerator] 📡 Calling AI API for voice recommendation')
 
       const result = await generateObject({
         model: aiModel,
@@ -99,12 +125,45 @@ export class VoiceProfileGeneratorService {
         temperature: 0.7,
       })
 
+      const elapsedTime = Date.now() - startTime
+
+      console.log('[VoiceProfileGenerator] ✅ Voice profile generated successfully', {
+        npcName: npc.name,
+        profileName: result.object.name,
+        gender: result.object.gender,
+        age: result.object.age,
+        tone: result.object.tone,
+        hasAccent: !!result.object.accent,
+        elapsedTimeMs: elapsedTime,
+        elapsedTimeSec: (elapsedTime / 1000).toFixed(2),
+      })
+
       return result.object as VoiceProfileRecommendation
     } catch (error) {
-      console.error('[VoiceProfileGenerator] Failed to generate recommendation:', error)
+      const elapsedTime = Date.now() - startTime
+
+      console.error('[VoiceProfileGenerator] ❌ Failed to generate recommendation', {
+        npcName: npc.name,
+        model,
+        error: (error as Error).message,
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        elapsedTimeMs: elapsedTime,
+      })
+
+      console.warn('[VoiceProfileGenerator] 🔄 Falling back to heuristics')
 
       // Fallback to simple heuristics
-      return this.getFallbackRecommendation(npc)
+      const fallbackResult = this.getFallbackRecommendation(npc)
+
+      console.log('[VoiceProfileGenerator] ✅ Fallback recommendation generated', {
+        npcName: npc.name,
+        profileName: fallbackResult.name,
+        gender: fallbackResult.gender,
+        age: fallbackResult.age,
+      })
+
+      return fallbackResult
     }
   }
 
@@ -117,37 +176,82 @@ export class VoiceProfileGeneratorService {
     projectId?: string,
     model: string = 'gpt-4o-mini'
   ): Promise<typeof voiceProfiles.$inferSelect> {
-    const recommendation = await this.generateVoiceProfileRecommendation(npc, model)
+    const startTime = Date.now()
 
-    const [profile] = await db.insert(voiceProfiles).values({
-      name: recommendation.name,
-      description: recommendation.description,
+    console.log('[VoiceProfileGenerator] 💾 Creating voice profile for NPC', {
+      npcName: npc.name,
       ownerId,
       projectId,
-      gender: recommendation.gender,
-      age: recommendation.age,
-      accent: recommendation.accent,
-      tone: recommendation.tone,
-      serviceProvider: 'elevenlabs', // Default to ElevenLabs
-      serviceSettings: {
-        ...recommendation.serviceSettings,
-        voiceGenerationReasoning: recommendation.reasoning,
-      },
-      characterIds: [],
-      tags: [npc.race, npc.class, npc.behavior].filter(Boolean) as string[],
-      metadata: {
-        generatedFrom: 'npc_characteristics',
+      model,
+    })
+
+    const recommendation = await this.generateVoiceProfileRecommendation(npc, model)
+
+    console.log('[VoiceProfileGenerator] 📝 Inserting voice profile into database', {
+      npcName: npc.name,
+      profileName: recommendation.name,
+      ownerId,
+    })
+
+    try {
+      const [profile] = await db.insert(voiceProfiles).values({
+        name: recommendation.name,
+        description: recommendation.description,
+        ownerId,
+        projectId,
+        gender: recommendation.gender,
+        age: recommendation.age,
+        accent: recommendation.accent,
+        tone: recommendation.tone,
+        serviceProvider: 'elevenlabs', // Default to ElevenLabs
+        serviceSettings: {
+          ...recommendation.serviceSettings,
+          voiceGenerationReasoning: recommendation.reasoning,
+        },
+        characterIds: [],
+        tags: [npc.race, npc.class, npc.behavior].filter(Boolean) as string[],
+        metadata: {
+          generatedFrom: 'npc_characteristics',
+          npcName: npc.name,
+          generatedAt: new Date().toISOString(),
+        },
+        isActive: true,
+      }).returning()
+
+      if (!profile) {
+        console.error('[VoiceProfileGenerator] ❌ Database returned no profile after insert', {
+          npcName: npc.name,
+        })
+        throw new Error('Failed to create voice profile')
+      }
+
+      const elapsedTime = Date.now() - startTime
+
+      console.log('[VoiceProfileGenerator] ✅ Voice profile created successfully', {
+        profileId: profile.id,
         npcName: npc.name,
-        generatedAt: new Date().toISOString(),
-      },
-      isActive: true,
-    }).returning()
+        profileName: profile.name,
+        ownerId,
+        projectId,
+        elapsedTimeMs: elapsedTime,
+        elapsedTimeSec: (elapsedTime / 1000).toFixed(2),
+      })
 
-    if (!profile) {
-      throw new Error('Failed to create voice profile')
+      return profile
+    } catch (error) {
+      const elapsedTime = Date.now() - startTime
+
+      console.error('[VoiceProfileGenerator] ❌ Failed to create voice profile in database', {
+        npcName: npc.name,
+        ownerId,
+        error: (error as Error).message,
+        errorName: (error as Error).name,
+        stack: (error as Error).stack,
+        elapsedTimeMs: elapsedTime,
+      })
+
+      throw error
     }
-
-    return profile
   }
 
   /**
@@ -157,9 +261,20 @@ export class VoiceProfileGeneratorService {
     npcs: NPCCharacteristics[],
     model: string = 'gpt-4o-mini'
   ): Promise<Map<string, VoiceProfileRecommendation>> {
+    const startTime = Date.now()
+
+    console.log('[VoiceProfileGenerator] 🎤🎤🎤 Starting batch voice profile generation', {
+      totalNPCs: npcs.length,
+      model,
+      npcNames: npcs.map(n => n.name),
+      timestamp: new Date().toISOString(),
+    })
+
     const recommendations = new Map<string, VoiceProfileRecommendation>()
 
     // Generate in parallel with Promise.allSettled to handle failures gracefully
+    console.log('[VoiceProfileGenerator] 🚀 Launching parallel generation for all NPCs')
+
     const results = await Promise.allSettled(
       npcs.map(async (npc) => {
         const recommendation = await this.generateVoiceProfileRecommendation(npc, model)
@@ -167,11 +282,41 @@ export class VoiceProfileGeneratorService {
       })
     )
 
+    let successful = 0
+    let failed = 0
+
     for (const result of results) {
       if (result.status === 'fulfilled') {
         recommendations.set(result.value.npcName, result.value.recommendation)
+        successful++
+
+        console.log('[VoiceProfileGenerator] ✅ Batch item completed', {
+          npcName: result.value.npcName,
+          profileName: result.value.recommendation.name,
+          progress: `${successful + failed}/${npcs.length}`,
+        })
+      } else {
+        failed++
+
+        console.error('[VoiceProfileGenerator] ❌ Batch item failed', {
+          error: result.reason,
+          progress: `${successful + failed}/${npcs.length}`,
+        })
       }
     }
+
+    const elapsedTime = Date.now() - startTime
+    const successRate = ((successful / npcs.length) * 100).toFixed(1)
+
+    console.log('[VoiceProfileGenerator] 📊 Batch generation complete', {
+      successful,
+      failed,
+      total: npcs.length,
+      successRate: `${successRate}%`,
+      elapsedTimeMs: elapsedTime,
+      elapsedTimeSec: (elapsedTime / 1000).toFixed(2),
+      avgTimePerNPCMs: Math.round(elapsedTime / npcs.length),
+    })
 
     return recommendations
   }

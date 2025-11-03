@@ -135,6 +135,15 @@ export class MultiAgentOrchestrator {
   private aiService: AISDKService
 
   constructor(config: OrchestratorConfig = {}) {
+    console.log('[MultiAgentOrchestrator] 🎭 Initializing orchestrator', {
+      maxRounds: config.maxRounds || 10,
+      temperature: config.temperature || 0.8,
+      enableCrossValidation: config.enableCrossValidation !== false,
+      model: config.model || 'default',
+      generateVoiceProfiles: config.generateVoiceProfiles !== false,
+      timestamp: new Date().toISOString(),
+    })
+
     this.agents = new Map()
     this.sharedMemory = {
       conversationHistory: [],
@@ -150,17 +159,35 @@ export class MultiAgentOrchestrator {
       generateVoiceProfiles: config.generateVoiceProfiles !== false,
     }
     this.aiService = new AISDKService()
+
+    console.log('[MultiAgentOrchestrator] ✅ Orchestrator initialized successfully')
   }
 
   /**
    * Register an agent with the orchestrator
    */
   registerAgent(agentConfig: AgentConfig): void {
+    console.log('[MultiAgentOrchestrator] 📝 Registering agent', {
+      id: agentConfig.id,
+      name: agentConfig.name,
+      role: agentConfig.role,
+      hasPersona: !!agentConfig.persona,
+      systemPromptLength: agentConfig.systemPrompt?.length || 0,
+    })
+
     if (!agentConfig.id || !agentConfig.name || !agentConfig.role) {
+      console.error('[MultiAgentOrchestrator] ❌ Agent registration failed - missing required fields', {
+        hasId: !!agentConfig.id,
+        hasName: !!agentConfig.name,
+        hasRole: !!agentConfig.role,
+      })
       throw new Error('Agent must have id, name, and role')
     }
 
     if (!agentConfig.systemPrompt) {
+      console.error('[MultiAgentOrchestrator] ❌ Agent registration failed - missing systemPrompt', {
+        agentName: agentConfig.name,
+      })
       throw new Error(`Agent ${agentConfig.name} must have a systemPrompt`)
     }
 
@@ -168,6 +195,12 @@ export class MultiAgentOrchestrator {
       ...agentConfig,
       messageCount: 0,
       lastActive: null,
+    })
+
+    console.log('[MultiAgentOrchestrator] ✅ Agent registered successfully', {
+      agentId: agentConfig.id,
+      agentName: agentConfig.name,
+      totalAgents: this.agents.size,
     })
   }
 
@@ -234,7 +267,19 @@ export class MultiAgentOrchestrator {
     initialPrompt: string,
     startingAgentId: string | null = null
   ): Promise<ConversationResult> {
+    const startTime = Date.now()
+
+    console.log('[MultiAgentOrchestrator] 🎬 Starting conversation round', {
+      promptPreview: initialPrompt.substring(0, 100) + '...',
+      promptLength: initialPrompt.length,
+      startingAgentId,
+      maxRounds: this.config.maxRounds,
+      totalAgents: this.agents.size,
+      timestamp: new Date().toISOString(),
+    })
+
     if (!initialPrompt) {
+      console.error('[MultiAgentOrchestrator] ❌ Conversation failed - no initial prompt')
       throw new Error('Initial prompt is required')
     }
 
@@ -253,20 +298,51 @@ export class MultiAgentOrchestrator {
     let previousAgentId: string | null = null
 
     for (let round = 0; round < this.config.maxRounds; round++) {
+      const roundStartTime = Date.now()
+
+      console.log(`[MultiAgentOrchestrator] 🎯 Round ${round + 1}/${this.config.maxRounds}`, {
+        round: round + 1,
+        currentAgentId,
+        previousAgentId,
+        contextLength: currentContext.length,
+      })
+
       // Select agent for this round
       let agent: AgentState | undefined
       if (currentAgentId) {
         agent = this.agents.get(currentAgentId)
+        console.log('[MultiAgentOrchestrator] 👤 Using specified agent', {
+          agentId: currentAgentId,
+          agentName: agent?.name,
+        })
       } else {
+        console.log('[MultiAgentOrchestrator] 🔀 Routing to appropriate agent')
         agent = await this.routeToAgent(currentContext, previousAgentId ? [previousAgentId] : [])
+        console.log('[MultiAgentOrchestrator] ✓ Agent selected by routing', {
+          agentId: agent?.id,
+          agentName: agent?.name,
+          agentRole: agent?.role,
+        })
       }
 
       if (!agent) {
+        console.warn('[MultiAgentOrchestrator] ⚠️  No agent available for round', { round })
         break // No more agents available
       }
 
       // Generate agent response
+      console.log('[MultiAgentOrchestrator] 💭 Generating agent response', {
+        agentName: agent.name,
+        round: round + 1,
+      })
       const response = await this.generateAgentResponse(agent, currentContext)
+
+      console.log('[MultiAgentOrchestrator] ✓ Agent response generated', {
+        agentName: agent.name,
+        responseLength: response.text.length,
+        finishReason: response.finishReason,
+        responsePreview: response.text.substring(0, 150) + '...',
+      })
 
       // Record in shared memory
       const message: ConversationMessage = {
@@ -287,7 +363,23 @@ export class MultiAgentOrchestrator {
 
       // Check for conversation handoff or completion
       const handoff = this.detectHandoff(response.text)
+
+      const roundElapsed = Date.now() - roundStartTime
+
+      console.log(`[MultiAgentOrchestrator] ✅ Round ${round + 1} complete`, {
+        round: round + 1,
+        agentName: agent.name,
+        shouldEnd: handoff.shouldEnd,
+        hasHandoff: !!handoff.nextAgentId,
+        handoffReason: handoff.reason,
+        roundElapsedMs: roundElapsed,
+      })
+
       if (handoff.shouldEnd) {
+        console.log('[MultiAgentOrchestrator] 🏁 Conversation ending - END signal detected', {
+          finalRound: round + 1,
+          reason: handoff.reason,
+        })
         break
       }
 
@@ -297,18 +389,55 @@ export class MultiAgentOrchestrator {
       currentAgentId = handoff.nextAgentId || null
     }
 
+    const conversationElapsed = Date.now() - startTime
+
+    console.log('[MultiAgentOrchestrator] 📊 Conversation rounds complete', {
+      totalRounds: result.rounds.length,
+      maxRounds: this.config.maxRounds,
+      conversationElapsedMs: conversationElapsed,
+      avgRoundTimeMs: Math.round(conversationElapsed / result.rounds.length),
+    })
+
     // Extract emergent content (relationships, quests, lore)
+    console.log('[MultiAgentOrchestrator] 🔍 Extracting emergent content')
     result.emergentContent = this.extractEmergentContent(result.rounds)
+
+    console.log('[MultiAgentOrchestrator] ✓ Emergent content extracted', {
+      relationships: result.emergentContent.relationships.length,
+      questIdeas: result.emergentContent.questIdeas.length,
+      loreFragments: result.emergentContent.loreFragments.length,
+      dialogueSnippets: result.emergentContent.dialogueSnippets.length,
+    })
 
     // Generate voice profiles if enabled
     if (this.config.generateVoiceProfiles) {
+      console.log('[MultiAgentOrchestrator] 🎤 Generating voice profiles')
       result.emergentContent.voiceProfiles = await this.generateVoiceProfilesForAgents()
+      console.log('[MultiAgentOrchestrator] ✓ Voice profiles generated', {
+        count: result.emergentContent.voiceProfiles?.length || 0,
+      })
     }
 
     // Perform cross-validation if enabled
     if (this.config.enableCrossValidation) {
+      console.log('[MultiAgentOrchestrator] 🔍 Running cross-validation')
       result.validation = await this.crossValidate(result.emergentContent)
+      console.log('[MultiAgentOrchestrator] ✓ Cross-validation complete', {
+        validated: result.validation?.validated,
+        confidence: result.validation?.confidence,
+      })
     }
+
+    const totalElapsed = Date.now() - startTime
+
+    console.log('[MultiAgentOrchestrator] 🏁 Conversation complete', {
+      totalRounds: result.rounds.length,
+      relationships: result.emergentContent.relationships.length,
+      voiceProfiles: result.emergentContent.voiceProfiles?.length || 0,
+      validated: result.validation?.validated,
+      totalElapsedMs: totalElapsed,
+      totalElapsedSec: (totalElapsed / 1000).toFixed(2),
+    })
 
     return result
   }
