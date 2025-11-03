@@ -57,6 +57,7 @@ import frontendErrorRoutes from './routes/frontend-errors'
 import importAssetsRoutes from './routes/import-assets'
 import { syncMinioRoute } from './routes/sync-minio'
 import { bulkSyncMinioRoute } from './routes/bulk-sync-minio'
+import { cleanupInvalidAssetsRoute } from './routes/cleanup-invalid-assets'
 
 // Utils
 import { AppError } from './utils/errors'
@@ -165,6 +166,7 @@ export async function buildServer() {
   // MinIO Sync
   await server.register(syncMinioRoute, { prefix: '/api' })
   await server.register(bulkSyncMinioRoute, { prefix: '/api' })
+  await server.register(cleanupInvalidAssetsRoute, { prefix: '/api' })
 
   // Global error handler
   server.setErrorHandler(async (error, request, reply) => {

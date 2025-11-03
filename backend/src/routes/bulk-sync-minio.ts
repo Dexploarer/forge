@@ -10,6 +10,29 @@ import { minioStorageService } from '@/services/minio.service'
 const publicHost = 'bucket-staging-4c7a.up.railway.app'
 const BATCH_SIZE = 50
 
+// Valid file extensions based on Three.js loaders and common formats
+const VALID_3D_EXTENSIONS = [
+  '.glb', '.gltf', // GL Transmission Format (recommended for Three.js)
+  '.obj', '.fbx', '.dae', '.stl', '.ply', // Common 3D formats
+  '.3dm', '.3ds', '.3mf', '.amf', // Additional 3D formats
+  '.drc', '.kmz', '.ldr', '.mpd', '.md2', // More formats
+  '.usdz', '.usda', '.usdc', // Universal Scene Description
+  '.vox', '.vtk', '.vtp', '.wrl', '.xyz', // Specialized formats
+]
+
+const VALID_AUDIO_EXTENSIONS = [
+  '.mp3', '.wav', '.ogg', '.m4a', '.aac', '.flac', '.wma'
+]
+
+const VALID_IMAGE_EXTENSIONS = [
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif'
+]
+
+const isValidFile = (filename: string, validExtensions: string[]): boolean => {
+  const ext = filename.toLowerCase().match(/\.[^.]+$/)?.[0]
+  return ext ? validExtensions.includes(ext) : false
+}
+
 export const bulkSyncMinioRoute: FastifyPluginAsync = async (server) => {
   server.post('/bulk-sync-minio', async (_request, reply) => {
     try {
@@ -45,9 +68,12 @@ export const bulkSyncMinioRoute: FastifyPluginAsync = async (server) => {
       // Sync 3D models
       try {
         console.log('📦 Processing 3d-models bucket...')
-        const files = await minioStorageService.listFiles('3d-models')
+        const allFiles = await minioStorageService.listFiles('3d-models')
+        const files = allFiles.filter(f => isValidFile(f, [...VALID_3D_EXTENSIONS, ...VALID_IMAGE_EXTENSIONS]))
+        const skipped = allFiles.length - files.length
+
         summary['3d-models'].found = files.length
-        console.log(`  Found ${files.length} files`)
+        console.log(`  Found ${files.length} valid files (${skipped} skipped)`)
 
         if (files.length > 0) {
           const records = files.map((filename) => {
@@ -82,9 +108,12 @@ export const bulkSyncMinioRoute: FastifyPluginAsync = async (server) => {
       // Sync audio
       try {
         console.log('\n📦 Processing audio bucket...')
-        const files = await minioStorageService.listFiles('audio')
+        const allFiles = await minioStorageService.listFiles('audio')
+        const files = allFiles.filter(f => isValidFile(f, VALID_AUDIO_EXTENSIONS))
+        const skipped = allFiles.length - files.length
+
         summary.audio.found = files.length
-        console.log(`  Found ${files.length} files`)
+        console.log(`  Found ${files.length} valid files (${skipped} skipped)`)
 
         if (files.length > 0) {
           const records = files.map((filename) => ({
@@ -111,9 +140,12 @@ export const bulkSyncMinioRoute: FastifyPluginAsync = async (server) => {
       // Sync images
       try {
         console.log('\n📦 Processing images bucket...')
-        const files = await minioStorageService.listFiles('images')
+        const allFiles = await minioStorageService.listFiles('images')
+        const files = allFiles.filter(f => isValidFile(f, VALID_IMAGE_EXTENSIONS))
+        const skipped = allFiles.length - files.length
+
         summary.images.found = files.length
-        console.log(`  Found ${files.length} files`)
+        console.log(`  Found ${files.length} valid files (${skipped} skipped)`)
 
         if (files.length > 0) {
           const records = files.map((filename) => ({

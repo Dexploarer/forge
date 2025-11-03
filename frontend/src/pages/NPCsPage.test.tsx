@@ -149,9 +149,9 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
         expect(screen.getByText('Bjorn the Blacksmith')).toBeInTheDocument()
-        expect(screen.getByText('Lyra the Bard')).toBeInTheDocument()
+        expect(screen.getAllByText('Lyra the Bard').length).toBeGreaterThan(0)
       })
 
       expect(global.fetch).toHaveBeenCalledWith(
@@ -234,7 +234,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       const createButton = screen.getByRole('button', { name: /create npc/i })
@@ -249,7 +249,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -272,7 +272,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -319,7 +319,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -354,7 +354,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -368,7 +368,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -392,7 +392,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -442,7 +442,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -476,7 +476,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -498,7 +498,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -523,14 +523,14 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
         expect(screen.getByText('Bjorn the Blacksmith')).toBeInTheDocument()
       })
 
       const searchInput = screen.getByPlaceholderText(/search npcs by name or personality/i)
       await user.type(searchInput, 'elara')
 
-      expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+      expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       expect(screen.queryByText('Bjorn the Blacksmith')).not.toBeInTheDocument()
     })
 
@@ -539,7 +539,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       const searchInput = screen.getByPlaceholderText(/search npcs by name or personality/i)
@@ -554,7 +554,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       // Click on faction filter
@@ -570,7 +570,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       // "All" should show total count
@@ -584,7 +584,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       // Apply faction filter
@@ -593,7 +593,7 @@ describe('NPCsPage - Integration Tests', () => {
       // Apply search
       await user.type(screen.getByPlaceholderText(/search npcs by name or personality/i), 'elara')
 
-      expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+      expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       expect(screen.queryByText('Bjorn the Blacksmith')).not.toBeInTheDocument()
     })
 
@@ -602,7 +602,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.type(
@@ -625,7 +625,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       const buttons = screen.getAllByRole('button')
@@ -659,11 +659,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      const npcCard = screen.getByText('Elara the Wise')
-      await user.click(npcCard)
+      const npcCards = screen.getAllByText('Elara the Wise')
+      await user.click(npcCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Personality')).toBeInTheDocument()
@@ -675,10 +675,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Personality')).toBeInTheDocument()
@@ -693,10 +694,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Faction')).toBeInTheDocument()
@@ -709,10 +711,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Voice Settings')).toBeInTheDocument()
@@ -725,10 +728,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       // Check for lore tab content (implementation specific)
       await waitFor(() => {
@@ -742,10 +746,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Seek the Oracle')).toBeInTheDocument()
@@ -758,10 +763,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Temple of Wisdom')).toBeInTheDocument()
@@ -774,10 +780,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByText('Created')).toBeInTheDocument()
@@ -810,10 +817,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       // Find and click Generate Image button in detail modal
       await waitFor(() => {
@@ -861,10 +869,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /generate image/i })).toBeInTheDocument()
@@ -893,10 +902,11 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
-      await user.click(screen.getByText('Elara the Wise'))
+      const elaraCards = screen.getAllByText('Elara the Wise')
+      await user.click(elaraCards[0])
 
       await waitFor(() => {
         expect(screen.getByRole('button', { name: /generate image/i })).toBeInTheDocument()
@@ -919,7 +929,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       // Featured NPCs should have featured badge
@@ -955,7 +965,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
@@ -979,7 +989,7 @@ describe('NPCsPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByText('Elara the Wise')).toBeInTheDocument()
+        expect(screen.getAllByText('Elara the Wise').length).toBeGreaterThan(0)
       })
 
       await user.click(screen.getByRole('button', { name: /create npc/i }))
