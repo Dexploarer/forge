@@ -4,13 +4,14 @@
  */
 
 import { useRef, useState, useEffect } from 'react'
-import { Play, Pause, Volume2, VolumeX, Download } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Download, Trash2 } from 'lucide-react'
 import { Button } from './Button'
 
 export interface AudioPlayerProps {
   url: string | null
   title?: string
   onDownload?: () => void
+  onDelete?: () => void
   autoPlay?: boolean
   className?: string
 }
@@ -19,6 +20,7 @@ export function AudioPlayer({
   url,
   title,
   onDownload,
+  onDelete,
   autoPlay = false,
   className = '',
 }: AudioPlayerProps) {
@@ -239,8 +241,22 @@ export function AudioPlayer({
             size="sm"
             onClick={onDownload}
             className="gap-2 shrink-0"
+            title="Download audio"
           >
             <Download size={16} />
+          </Button>
+        )}
+
+        {/* Delete Button */}
+        {onDelete && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDelete}
+            className="gap-2 shrink-0 hover:text-red-400"
+            title="Delete audio"
+          >
+            <Trash2 size={16} />
           </Button>
         )}
       </div>

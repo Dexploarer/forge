@@ -60,7 +60,7 @@ export default function SystemSettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const response = await apiFetch('/api/system-settings')
+        const response = await apiFetch('/api/system/settings')
         if (response.ok) {
           const data = await response.json()
           setSettings((prev) => ({ ...prev, ...data }))
@@ -78,7 +78,7 @@ export default function SystemSettingsPage() {
     setSaveError(null)
 
     try {
-      const response = await apiFetch('/api/system-settings', {
+      const response = await apiFetch('/api/system/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

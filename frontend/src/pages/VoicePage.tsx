@@ -599,7 +599,10 @@ export default function VoicePage() {
                       </div>
                       <p className="text-white text-sm mb-3">{generation.text}</p>
                       {generation.audioUrl && generation.status === 'completed' && (
-                        <AudioPlayer url={generation.audioUrl} />
+                        <AudioPlayer 
+                          url={generation.audioUrl}
+                          onDelete={() => handleDeleteGeneration(generation.id)}
+                        />
                       )}
                       {generation.error && (
                         <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-xs">
