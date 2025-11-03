@@ -41,15 +41,23 @@ export class MinioStorageService {
       let endpoint = env.MINIO_ENDPOINT
       endpoint = endpoint.replace(/^https?:\/\//, '')
 
+      // Extract port from endpoint if present (e.g., "host:9000" -> "host")
+      let port = env.MINIO_PORT || 9000
+      if (endpoint.includes(':')) {
+        const parts = endpoint.split(':')
+        endpoint = parts[0]!
+        port = parseInt(parts[1]!, 10) || port
+      }
+
       console.log('[MinioService] 🔧 Creating MinIO client', {
         endpoint,
-        port: env.MINIO_PORT || 9000,
+        port,
         useSSL: env.MINIO_USE_SSL || false,
       })
 
       this.client = new Minio.Client({
         endPoint: endpoint,
-        port: env.MINIO_PORT || 9000,
+        port,
         useSSL: env.MINIO_USE_SSL || false,
         accessKey: env.MINIO_ROOT_USER,
         secretKey: env.MINIO_ROOT_PASSWORD,
@@ -57,7 +65,7 @@ export class MinioStorageService {
 
       console.log(`[MinioService] ✅ MinIO client initialized successfully`, {
         endpoint,
-        port: env.MINIO_PORT || 9000,
+        port,
         useSSL: env.MINIO_USE_SSL || false,
         publicHost: this.publicHost,
       })

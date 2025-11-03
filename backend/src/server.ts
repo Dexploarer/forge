@@ -54,6 +54,7 @@ import contentGenerationRoutes from './routes/content-generation'
 import weaponDetectionRoutes from './routes/weapon-detection'
 import bootstrapRoutes from './routes/bootstrap'
 import frontendErrorRoutes from './routes/frontend-errors'
+import importAssetsRoutes from './routes/import-assets'
 
 // Utils
 import { AppError } from './utils/errors'
@@ -155,6 +156,9 @@ export async function buildServer() {
 
   // 3D Asset AI Features
   await server.register(weaponDetectionRoutes, { prefix: '/api' })
+
+  // Asset Import (admin/system)
+  await server.register(importAssetsRoutes, { prefix: '/api/import' })
 
   // Global error handler
   server.setErrorHandler(async (error, request, reply) => {
