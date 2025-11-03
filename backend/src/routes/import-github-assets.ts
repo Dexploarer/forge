@@ -1,5 +1,4 @@
 import { FastifyPluginAsync } from 'fastify'
-import { db } from '../database/db'
 import { assets } from '../database/schema'
 import { eq } from 'drizzle-orm'
 
@@ -47,6 +46,26 @@ export const importGitHubAssetsRoute: FastifyPluginAsync = async (server) => {
   server.post('/import-github-assets', async (_request, reply) => {
     try {
       console.log('🔄 Starting GitHub asset import from HyperscapeAI/assets...\n')
+
+      // Get or create a system user to use as owner
+      const { users } = await import('../database/schema')
+      let firstUser = await server.db.select().from(users).limit(1)
+
+      let ownerId: string
+      if (firstUser.length === 0) {
+        console.log('⚠️  No users found, creating system user...')
+        const [systemUser] = await server.db.insert(users).values({
+          privyUserId: 'system-public-assets',
+          displayName: 'System (Public Assets)',
+          email: 'system@forge.local',
+          role: 'admin'
+        }).returning()
+        ownerId = systemUser!.id
+        console.log(`✓ Created system user: ${ownerId}\n`)
+      } else {
+        ownerId = firstUser[0]!.id
+        console.log(`✓ Using owner: ${ownerId}\n`)
+      }
 
       const results: ImportResult[] = []
 
@@ -104,7 +123,7 @@ export const importGitHubAssetsRoute: FastifyPluginAsync = async (server) => {
             : null
 
           // Check if asset already exists by name
-          const existingAsset = await db.query.assets.findFirst({
+          const existingAsset = await server.db.query.assets.findFirst({
             where: eq(assets.name, metadata.name)
           })
 
@@ -141,7 +160,7 @@ export const importGitHubAssetsRoute: FastifyPluginAsync = async (server) => {
 
           if (existingAsset) {
             // Update existing asset
-            await db
+            await server.db
               .update(assets)
               .set({
                 ...assetData,
@@ -157,9 +176,9 @@ export const importGitHubAssetsRoute: FastifyPluginAsync = async (server) => {
             })
           } else {
             // Create new asset
-            await db.insert(assets).values({
+            await server.db.insert(assets).values({
               ...assetData,
-              ownerId: '00000000-0000-0000-0000-000000000000' // System/public owner
+              ownerId // Use the system/first user
             })
 
             console.log(`    ✅ Created: ${metadata.name}`)

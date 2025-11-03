@@ -46,17 +46,25 @@ export const bulkSyncMinioRoute: FastifyPluginAsync = async (server) => {
         })
       }
 
-      // Get the first user to use as owner
+      // Get or create a system user to use as owner
       const { users } = await import('@/database/schema')
-      const firstUser = await db.select().from(users).limit(1)
+      let firstUser = await db.select().from(users).limit(1)
+
+      let ownerId: string
       if (firstUser.length === 0) {
-        return reply.status(400).send({
-          success: false,
-          error: 'No users found in database. Please create a user first.',
-        })
+        console.log('⚠️  No users found, creating system user...')
+        const [systemUser] = await db.insert(users).values({
+          privyUserId: 'system-public-assets',
+          displayName: 'System (Public Assets)',
+          email: 'system@forge.local',
+          role: 'admin'
+        }).returning()
+        ownerId = systemUser!.id
+        console.log(`✓ Created system user: ${ownerId}\n`)
+      } else {
+        ownerId = firstUser[0]!.id
+        console.log(`✓ Using owner: ${ownerId}\n`)
       }
-      const ownerId = firstUser[0]!.id
-      console.log(`✓ Using owner: ${ownerId}\n`)
 
       let totalInserted = 0
       const summary = {
