@@ -22,19 +22,21 @@ afterEach(() => {
 
 beforeAll(() => {
   // Mock window.matchMedia (used by responsive components)
-  Object.defineProperty(window, 'matchMedia', {
-    writable: true,
-    value: vi.fn().mockImplementation((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(), // deprecated
-      removeListener: vi.fn(), // deprecated
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  })
+  if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(), // deprecated
+        removeListener: vi.fn(), // deprecated
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+  }
 
   // Mock IntersectionObserver (used by lazy loading)
   global.IntersectionObserver = class IntersectionObserver {
@@ -60,32 +62,34 @@ beforeAll(() => {
   }
 
   // Mock localStorage
-  const localStorageMock = {
-    getItem: vi.fn((key: string) => null),
-    setItem: vi.fn((key: string, value: string) => {}),
-    removeItem: vi.fn((key: string) => {}),
-    clear: vi.fn(() => {}),
-    key: vi.fn((index: number) => null),
-    length: 0,
-  }
-  Object.defineProperty(window, 'localStorage', {
-    value: localStorageMock,
-    writable: true,
-  })
+  if (typeof window !== 'undefined') {
+    const localStorageMock = {
+      getItem: vi.fn((key: string) => null),
+      setItem: vi.fn((key: string, value: string) => {}),
+      removeItem: vi.fn((key: string) => {}),
+      clear: vi.fn(() => {}),
+      key: vi.fn((index: number) => null),
+      length: 0,
+    }
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+    })
 
-  // Mock sessionStorage
-  const sessionStorageMock = {
-    getItem: vi.fn((key: string) => null),
-    setItem: vi.fn((key: string, value: string) => {}),
-    removeItem: vi.fn((key: string) => {}),
-    clear: vi.fn(() => {}),
-    key: vi.fn((index: number) => null),
-    length: 0,
+    // Mock sessionStorage
+    const sessionStorageMock = {
+      getItem: vi.fn((key: string) => null),
+      setItem: vi.fn((key: string, value: string) => {}),
+      removeItem: vi.fn((key: string) => {}),
+      clear: vi.fn(() => {}),
+      key: vi.fn((index: number) => null),
+      length: 0,
+    }
+    Object.defineProperty(window, 'sessionStorage', {
+      value: sessionStorageMock,
+      writable: true,
+    })
   }
-  Object.defineProperty(window, 'sessionStorage', {
-    value: sessionStorageMock,
-    writable: true,
-  })
 
   // Mock fetch (for API calls)
   global.fetch = vi.fn()

@@ -1,0 +1,40 @@
+{
+  "apiVersion": "1.0.0",
+  "name": "Forge - Game Asset Management Platform",
+  "description": "Production-ready game asset management and AI-powered content generation platform",
+  "version": "1.0.0",
+  "projects": {
+    "backend": {
+      "path": "./backend",
+      "stack": ["Bun", "Fastify", "TypeScript", "Drizzle ORM", "PostgreSQL", "Privy Auth"],
+      "skills": ["backend", "core"],
+      "primaryLanguages": ["TypeScript"],
+      "testFramework": "Bun Test"
+    },
+    "frontend": {
+      "path": "./frontend",
+      "stack": ["React 19", "TypeScript", "Vite", "Tailwind CSS", "Three.js", "Privy Auth", "Wagmi"],
+      "skills": ["frontend", "core"],
+      "primaryLanguages": ["TypeScript", "TSX"],
+      "testFramework": "Vitest"
+    }
+  },
+  "hooks": {
+    "enabled": true,
+    "categories": ["security", "strict-typing", "development-safety", "knowledge-cutoff"]
+  },
+  "agents": {
+    "enabled": true,
+    "autoSuggest": true
+  },
+  "commands": {
+    "enabled": true,
+    "prefix": "/"
+  },
+  "preferences": {
+    "codeStyle": "strict-typescript",
+    "architecture": "class-based",
+    "testing": "comprehensive",
+    "security": "high"
+  }
+}
