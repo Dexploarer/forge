@@ -59,6 +59,8 @@ import { syncMinioRoute } from './routes/sync-minio'
 import { bulkSyncMinioRoute } from './routes/bulk-sync-minio'
 import { cleanupInvalidAssetsRoute } from './routes/cleanup-invalid-assets'
 import { publicAssetManagementRoute } from './routes/public-asset-management'
+import { analyze3DModelsRoute } from './routes/analyze-3d-models'
+import { importGitHubAssetsRoute } from './routes/import-github-assets'
 
 // Utils
 import { AppError } from './utils/errors'
@@ -168,6 +170,10 @@ export async function buildServer() {
   await server.register(syncMinioRoute, { prefix: '/api' })
   await server.register(bulkSyncMinioRoute, { prefix: '/api' })
   await server.register(cleanupInvalidAssetsRoute, { prefix: '/api' })
+  await server.register(analyze3DModelsRoute, { prefix: '/api' })
+
+  // GitHub Asset Import
+  await server.register(importGitHubAssetsRoute, { prefix: '/api' })
 
   // Public Asset Management (no auth required)
   await server.register(publicAssetManagementRoute, { prefix: '/api' })
