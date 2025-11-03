@@ -48,7 +48,6 @@ export const syncMinioRoute: FastifyPluginAsync = async (server) => {
           name,
           type,
           fileUrl: url,
-          storageMode: 'minio' as const,
           status: 'published' as const,
           visibility: 'public' as const,
         }
@@ -62,7 +61,6 @@ export const syncMinioRoute: FastifyPluginAsync = async (server) => {
         name: filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
         type: 'texture' as const,
         fileUrl: `https://${publicHost}/images/${filename}`,
-        storageMode: 'minio' as const,
         status: 'published' as const,
         visibility: 'public' as const,
       }))
