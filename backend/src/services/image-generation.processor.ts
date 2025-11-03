@@ -2,7 +2,7 @@ import { AISDKService } from './ai-sdk.service'
 import { db } from '../database/db'
 import { assets } from '../database/schema'
 import { eq } from 'drizzle-orm'
-import { minioStorageService } from './minio.service'
+import { fileStorageService } from './file.service'
 
 interface ImageGenerationParams {
   prompt: string
@@ -43,16 +43,16 @@ export async function processImageGeneration(
     const base64Data = response.imageUrl.split(',')[1]!
     const buffer = Buffer.from(base64Data, 'base64')
 
-    console.log(`[Image-Gen] Image ready (${buffer.length} bytes), uploading to MinIO...`)
+    console.log(`[Image-Gen] Image ready (${buffer.length} bytes), saving to local storage...`)
 
-    // Upload to MinIO
-    const minioData = await minioStorageService.uploadFile(
+    // Save to local storage
+    const minioData = await fileStorageService.uploadFile(
       buffer,
       'image/png',
       `image-${assetId}.png`
     )
 
-    console.log(`[Image-Gen] Uploaded to MinIO: ${minioData.url}`)
+    console.log(`[Image-Gen] Saved to local storage: ${minioData.url}`)
 
     // Update asset with results
     await dbInstance.update(assets)
@@ -78,7 +78,7 @@ export async function processImageGeneration(
       })
       .where(eq(assets.id, assetId))
 
-    console.log(`[Image-Gen] Asset ${assetId} completed with MinIO storage`)
+    console.log(`[Image-Gen] Asset ${assetId} completed with local storage`)
   } catch (error) {
     console.error(`[Image-Gen] Error ${assetId}:`, error)
 

@@ -10,7 +10,7 @@ import { calculateOpenAICost, calculateMeshyCost, formatCost } from '../helpers/
 import { openaiService } from '../services/openai.service'
 import { meshyService } from '../services/meshy.service'
 import { embeddingsService } from '../services/embeddings.service'
-import { minioStorageService } from '../services/minio.service'
+import { fileStorageService } from '../services/file.service'
 
 const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -450,10 +450,10 @@ IMPORTANT: Return the image as a file, not as code or description.`
 
           // Try to upload to MinIO and create asset record
           try {
-            if (minioStorageService.isAvailable()) {
+            if (fileStorageService.isAvailable()) {
               // Upload to MinIO
               const ext = mimeType.split('/')[1] || 'png'
-              const uploadResult = await minioStorageService.uploadFile(
+              const uploadResult = await fileStorageService.uploadFile(
                 imageBuffer,
                 mimeType,
                 `ai-generated-${Date.now()}.${ext}`

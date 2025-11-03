@@ -4,7 +4,6 @@ import { eq, and, or, desc, sql } from 'drizzle-orm'
 import { assets } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
 import { fileStorageService } from '../services/file.service'
-import { minioStorageService } from '../services/minio.service'
 import { processImageGeneration } from '../services/image-generation.processor'
 import { imgproxyService } from '../services/imgproxy.service'
 import { getImageVariants, getOptimizedUrl } from '../utils/image-url'
@@ -402,7 +401,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const maxSize = 50 * 1024 * 1024
     const buffer = await data.toBuffer()
 
-    if (!minioStorageService.validateFileSize(buffer.length, maxSize)) {
+    if (!fileStorageService.validateFileSize(buffer.length, maxSize)) {
       throw new ValidationError('File too large (max 50MB)')
     }
 
@@ -417,7 +416,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       // Try to delete from MinIO first (if path looks like bucket/filename)
       if (asset.fileUrl.includes('/') && !asset.fileUrl.startsWith('http')) {
         try {
-          await minioStorageService.deleteFileByPath(asset.fileUrl)
+          await fileStorageService.deleteFileByPath(asset.fileUrl)
         } catch (error) {
           fastify.log.warn({ error }, 'Failed to delete old file from MinIO')
         }
@@ -426,10 +425,10 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Upload to MinIO (primary storage)
     let minioData: { path: string; url: string; filename: string; bucket: string } | null = null
-    if (minioStorageService.isAvailable()) {
+    if (fileStorageService.isAvailable()) {
       try {
         fastify.log.info({ assetId: id }, '[Assets] Uploading to MinIO')
-        minioData = await minioStorageService.uploadFile(
+        minioData = await fileStorageService.uploadFile(
           buffer,
           data.mimetype,
           data.filename
@@ -551,7 +550,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       if (metadata?.minioBucket && metadata?.minioPath) {
         try {
           fastify.log.info({ assetId: id, minioPath: metadata.minioPath }, '[Assets] Deleting file from MinIO')
-          await minioStorageService.deleteFileByPath(metadata.minioPath)
+          await fileStorageService.deleteFileByPath(metadata.minioPath)
         } catch (error) {
           fastify.log.warn({ error, assetId: id }, '[Assets] Failed to delete file from MinIO')
         }

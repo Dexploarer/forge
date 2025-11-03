@@ -13,7 +13,7 @@
 import { EventEmitter } from 'events'
 import { AISDKService } from './ai-sdk.service'
 import { MeshyService } from './meshy.service'
-import { minioStorageService } from './minio.service'
+import { fileStorageService } from './file.service'
 
 export interface PipelineConfig {
   name: string
@@ -181,12 +181,12 @@ export class GenerationService extends EventEmitter {
           imageDataUrl = result.imageUrl
 
           // Upload to MinIO
-          const minioData = await minioStorageService.uploadFile(
+          const minioData = await fileStorageService.uploadFile(
             buffer,
             'image/png',
             `concept-${pipelineId}.png`
           )
-          console.log(`[GenerationService] Concept art uploaded to MinIO: ${minioData.url}`)
+          console.log(`[GenerationService] Concept art saved to local storage: ${minioData.url}`)
 
           imageUrl = minioData.url
 
@@ -245,12 +245,12 @@ export class GenerationService extends EventEmitter {
           const buffer = Buffer.from(glbBuffer)
 
           // Upload to MinIO
-          const minioData = await minioStorageService.uploadFile(
+          const minioData = await fileStorageService.uploadFile(
             buffer,
             'model/gltf-binary',
             `model-${pipelineId}.glb`
           )
-          console.log(`[GenerationService] 3D model uploaded to MinIO: ${minioData.url}`)
+          console.log(`[GenerationService] 3D model saved to local storage: ${minioData.url}`)
 
           modelUrl = minioData.url
           thumbnailUrl = completedTask.result.thumbnailUrl

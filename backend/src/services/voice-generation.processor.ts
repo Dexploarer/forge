@@ -2,7 +2,7 @@ import { elevenLabsService } from './elevenlabs.service'
 import { db } from '../database/db'
 import { voiceGenerations } from '../database/schema'
 import { eq } from 'drizzle-orm'
-import { minioStorageService } from './minio.service'
+import { fileStorageService } from './file.service'
 
 interface VoiceGenerationParams {
   text: string
@@ -42,8 +42,8 @@ export async function processVoiceGeneration(
       }
     )
 
-    // Upload to MinIO
-    const minioData = await minioStorageService.uploadFile(
+    // Save to local storage
+    const minioData = await fileStorageService.saveFile(
       audioBuffer,
       'audio/mpeg',
       `voice-${generationId}.mp3`

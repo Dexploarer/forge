@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { eq, desc, sql, gte } from 'drizzle-orm'
 import { users, assets } from '../database/schema'
 import { ForbiddenError, NotFoundError } from '../utils/errors'
+import { fileStorageService } from '../services/file.service'
 
 const adminRoutes: FastifyPluginAsync = async (fastify) => {
   // Debug endpoint to check auth status
@@ -418,35 +419,32 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     return { activity }
   })
 
-  // Test MinIO connection
+  // Test File Storage connection
   fastify.get('/test-minio', {
     preHandler: [fastify.authenticate, requireAdmin],
     schema: {
-      description: 'Test MinIO connection and configuration',
-      summary: 'Test MinIO',
+      description: 'Test File Storage connection and configuration',
+      summary: 'Test File Storage',
       tags: ['admin'],
       security: [{ bearerAuth: [] }],
     }
   }, async (_request) => {
     try {
-      const { minioStorageService } = await import('../services/minio.service')
+      // Using fileStorageService (local file storage)
 
       const testResult: any = {
-        isAvailable: minioStorageService.isAvailable(),
+        isAvailable: fileStorageService.isAvailable(),
+        storageType: 'local',
         envVars: {
-          MINIO_ENDPOINT: process.env.MINIO_ENDPOINT,
-          MINIO_PORT: process.env.MINIO_PORT,
-          MINIO_USE_SSL: process.env.MINIO_USE_SSL,
-          MINIO_ROOT_USER: process.env.MINIO_ROOT_USER ? 'SET (hidden)' : 'NOT SET',
-          MINIO_ROOT_PASSWORD: process.env.MINIO_ROOT_PASSWORD ? 'SET (hidden)' : 'NOT SET',
-          MINIO_PUBLIC_HOST: process.env.MINIO_PUBLIC_HOST,
+          FILE_STORAGE_PATH: process.env.FILE_STORAGE_PATH || './uploads',
+          FILE_SERVER_URL: process.env.FILE_SERVER_URL || 'NOT SET (using relative URLs)',
         }
       }
 
-      if (minioStorageService.isAvailable()) {
+      if (fileStorageService.isAvailable()) {
         try {
           // Try to list a single file from the assets bucket
-          testResult.testListAssets = await minioStorageService.listFiles('assets')
+          testResult.testListAssets = await fileStorageService.listFiles('assets')
           testResult.assetsCount = testResult.testListAssets.length
         } catch (err: any) {
           testResult.listError = err.message
@@ -484,9 +482,9 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
     }
   }, async (_request) => {
     try {
-      const { minioStorageService } = await import('../services/minio.service')
+      // Using fileStorageService (local file storage)
 
-      if (!minioStorageService.isAvailable()) {
+      if (!fileStorageService.isAvailable()) {
         return {
           success: false,
           buckets: []
@@ -503,7 +501,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
 
       for (const bucketName of possibleBuckets) {
         try {
-          const files = await minioStorageService.listFiles(bucketName)
+          const files = await fileStorageService.listFiles(bucketName)
           if (files.length > 0 || true) { // Include even empty buckets
             buckets.push({
               name: bucketName,
@@ -555,9 +553,9 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       debugInfo.push('🔄 Admin triggered MinIO to DB sync')
       fastify.log.info('🔄 Admin triggered MinIO to DB sync')
 
-      const { minioStorageService } = await import('../services/minio.service')
+      // Using fileStorageService (local file storage)
 
-      const isAvailable = minioStorageService.isAvailable()
+      const isAvailable = fileStorageService.isAvailable()
       debugInfo.push(`MinIO available: ${isAvailable}`)
 
       if (!isAvailable) {
@@ -592,7 +590,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       for (const bucket of buckets) {
         try {
           debugInfo.push(`Listing files in bucket: ${bucket}`)
-          const files = await minioStorageService.listFiles(bucket)
+          const files = await fileStorageService.listFiles(bucket)
           totalFiles += files.length
 
           debugInfo.push(`Found ${files.length} files in bucket: ${bucket}`)
@@ -641,7 +639,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
             // Get file stats for size
             let fileSize = 0
             try {
-              const stats = await minioStorageService.getFileStats(bucket, filename)
+              const stats = await fileStorageService.getFileStats(bucket, filename)
               fileSize = stats.size
             } catch (err) {
               fastify.log.warn(`Could not get file size for ${filename}`)

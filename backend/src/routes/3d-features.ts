@@ -11,7 +11,7 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
 import { openaiService } from '../services/openai.service'
 import { processGeneration3D } from '../services/3d-generation.processor'
-import { minioStorageService } from '../services/minio.service'
+import { fileStorageService } from '../services/file.service'
 
 const threeDFeaturesRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -212,7 +212,7 @@ const threeDFeaturesRoutes: FastifyPluginAsync = async (fastify) => {
     fastify.log.info({ assetId, size: modelBuffer.length }, '[3D-Save] Model downloaded successfully')
 
     // Upload to MinIO
-    const minioData = await minioStorageService.uploadFile(
+    const minioData = await fileStorageService.uploadFile(
       modelBuffer,
       'model/gltf-binary', // GLB MIME type
       `${asset.name.replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.glb`

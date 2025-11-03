@@ -73,16 +73,6 @@ const envSchema = z.object({
   FFMPEG_PATH: z.string().optional(),
   FFPROBE_PATH: z.string().optional(),
 
-  // MinIO Configuration
-  MINIO_ENDPOINT: z.string().optional(), // Can be derived from PRIVATE or PUBLIC endpoint
-  MINIO_PRIVATE_ENDPOINT: z.string().optional(),
-  MINIO_PUBLIC_ENDPOINT: z.string().optional(),
-  MINIO_PUBLIC_HOST: z.string().optional(),
-  MINIO_ROOT_USER: z.string().optional(),
-  MINIO_ROOT_PASSWORD: z.string().optional(),
-  MINIO_PORT: z.coerce.number().int().min(1).max(65535).optional(),
-  MINIO_USE_SSL: z.coerce.boolean().default(false),
-
   // imgproxy Configuration
   IMGPROXY_URL: z.string().optional(), // imgproxy server URL (e.g., imgproxy-staging.up.railway.app)
   IMGPROXY_KEY: z.string().optional(), // HMAC key for URL signing (hex)

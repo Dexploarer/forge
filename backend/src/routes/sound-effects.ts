@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { eq, and, or, desc, sql } from 'drizzle-orm'
 import { soundEffects } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
-import { minioStorageService } from '../services/minio.service'
+import { fileStorageService } from '../services/file.service'
 import { audioProcessorService } from '../services/audio-processor.service'
 import { SoundEffectsService } from '../services/sound-effects.service'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -396,14 +396,14 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       mimetype: data.mimetype,
     }, '[SFX] File received, validating')
 
-    if (!minioStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
+    if (!fileStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
       throw new ValidationError('Invalid file type for sound effect')
     }
 
     const maxSize = 20 * 1024 * 1024 // 20MB
     const buffer = await data.toBuffer()
 
-    if (!minioStorageService.validateFileSize(buffer.length, maxSize)) {
+    if (!fileStorageService.validateFileSize(buffer.length, maxSize)) {
       throw new ValidationError('File too large (max 20MB)')
     }
 
@@ -418,12 +418,12 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       const metadata = sfx.metadata as Record<string, any>
       if (metadata?.minioPath) {
         fastify.log.info({ sfxId: id, oldPath: metadata.minioPath }, '[SFX] Deleting old file')
-        await minioStorageService.deleteFileByPath(metadata.minioPath)
+        await fileStorageService.deleteFileByPath(metadata.minioPath)
       }
     }
 
     // Upload to MinIO
-    const minioData = await minioStorageService.uploadFile(
+    const minioData = await fileStorageService.uploadFile(
       buffer,
       data.mimetype,
       data.filename
@@ -529,7 +529,7 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       })
 
       // Upload to MinIO
-      const minioData = await minioStorageService.uploadFile(
+      const minioData = await fileStorageService.uploadFile(
         audioBuffer,
         'audio/mpeg',
         `sfx-${Date.now()}.mp3`
@@ -740,7 +740,7 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       const metadata = sfx.metadata as Record<string, any>
       if (metadata?.minioPath) {
         fastify.log.info({ sfxId: id, minioPath: metadata.minioPath }, '[SFX] Deleting file from MinIO')
-        await minioStorageService.deleteFileByPath(metadata.minioPath)
+        await fileStorageService.deleteFileByPath(metadata.minioPath)
       }
     }
 

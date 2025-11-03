@@ -7,7 +7,7 @@ import { env } from '../config/env'
 import { MusicService } from './music.service'
 import { SoundEffectsService } from './sound-effects.service'
 import { ElevenLabsService } from './elevenlabs.service'
-import { minioStorageService } from './minio.service'
+import { fileStorageService } from './file.service'
 
 export interface MusicParams {
   prompt: string
@@ -94,8 +94,8 @@ export class AudioGenerationService {
         outputFormat: undefined,
       })
 
-      // Upload to MinIO
-      const minioData = await minioStorageService.uploadFile(
+      // Save to local storage
+      const minioData = await fileStorageService.saveFile(
         audioBuffer,
         'audio/mpeg',
         `music-${Date.now()}.mp3`
@@ -150,8 +150,8 @@ export class AudioGenerationService {
         promptInfluence: 0.3, // Default prompt influence
       })
 
-      // Upload to MinIO
-      const minioData = await minioStorageService.uploadFile(
+      // Save to local storage
+      const minioData = await fileStorageService.saveFile(
         audioBuffer,
         'audio/mpeg',
         `sfx-${Date.now()}.mp3`
@@ -219,8 +219,8 @@ export class AudioGenerationService {
         },
       })
 
-      // Upload to MinIO
-      const minioData = await minioStorageService.uploadFile(
+      // Save to local storage
+      const minioData = await fileStorageService.saveFile(
         audioBuffer,
         'audio/mpeg',
         `voice-${Date.now()}.mp3`

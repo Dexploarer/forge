@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { eq, and, or, desc, sql } from 'drizzle-orm'
 import { musicTracks } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
-import { minioStorageService } from '../services/minio.service'
+import { fileStorageService } from '../services/file.service'
 import { audioProcessorService } from '../services/audio-processor.service'
 import { MusicService } from '../services/music.service'
 import { serializeAllTimestamps } from '../helpers/serialization'
@@ -335,14 +335,14 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('No file uploaded')
     }
 
-    if (!minioStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
+    if (!fileStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
       throw new ValidationError('Invalid file type for music')
     }
 
     const maxSize = 100 * 1024 * 1024 // 100MB
     const buffer = await data.toBuffer()
 
-    if (!minioStorageService.validateFileSize(buffer.length, maxSize)) {
+    if (!fileStorageService.validateFileSize(buffer.length, maxSize)) {
       throw new ValidationError('File too large (max 100MB)')
     }
 
@@ -350,12 +350,12 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
     if (track.audioUrl) {
       const metadata = track.metadata as Record<string, any>
       if (metadata?.minioPath) {
-        await minioStorageService.deleteFileByPath(metadata.minioPath)
+        await fileStorageService.deleteFileByPath(metadata.minioPath)
       }
     }
 
     // Upload to MinIO
-    const minioData = await minioStorageService.uploadFile(
+    const minioData = await fileStorageService.uploadFile(
       buffer,
       data.mimetype,
       data.filename
@@ -450,7 +450,7 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
       })
 
       // Upload to MinIO
-      const minioData = await minioStorageService.uploadFile(
+      const minioData = await fileStorageService.uploadFile(
         audioBuffer,
         'audio/mpeg',
         `music-${Date.now()}.mp3`
@@ -586,7 +586,7 @@ const musicRoutes: FastifyPluginAsync = async (fastify) => {
     if (track.audioUrl) {
       const metadata = track.metadata as Record<string, any>
       if (metadata?.minioPath) {
-        await minioStorageService.deleteFileByPath(metadata.minioPath)
+        await fileStorageService.deleteFileByPath(metadata.minioPath)
       }
     }
 

@@ -55,8 +55,6 @@ import weaponDetectionRoutes from './routes/weapon-detection'
 import bootstrapRoutes from './routes/bootstrap'
 import frontendErrorRoutes from './routes/frontend-errors'
 import importAssetsRoutes from './routes/import-assets'
-import { syncMinioRoute } from './routes/sync-minio'
-import { bulkSyncMinioRoute } from './routes/bulk-sync-minio'
 import { cleanupInvalidAssetsRoute } from './routes/cleanup-invalid-assets'
 import { publicAssetManagementRoute } from './routes/public-asset-management'
 import { analyze3DModelsRoute } from './routes/analyze-3d-models'
@@ -166,9 +164,7 @@ export async function buildServer() {
   // Asset Import (admin/system)
   await server.register(importAssetsRoutes, { prefix: '/api/import' })
 
-  // MinIO Sync
-  await server.register(syncMinioRoute, { prefix: '/api' })
-  await server.register(bulkSyncMinioRoute, { prefix: '/api' })
+  // Asset Management & Analysis
   await server.register(cleanupInvalidAssetsRoute, { prefix: '/api' })
   await server.register(analyze3DModelsRoute, { prefix: '/api' })
 
