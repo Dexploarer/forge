@@ -74,7 +74,7 @@ export class MinioStorageService {
 
   async ensureBuckets() {
     if (!this.client) {
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     for (const bucket of Object.values(this.buckets)) {
@@ -127,7 +127,7 @@ export class MinioStorageService {
 
     if (!this.client) {
       console.error('[MinioService] ❌ Upload failed - client not initialized')
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     const ext = originalFilename.split('.').pop() || 'bin'
@@ -162,7 +162,7 @@ export class MinioStorageService {
         contentType: mimetype,
       })
 
-      await this.client.putObject(bucket, filename, buffer, buffer.length, {
+      await this.client.putObject(bucket, filename, buffer, Number(buffer.length), {
         'Content-Type': mimetype,
       })
 
@@ -204,8 +204,8 @@ export class MinioStorageService {
       })
 
       throw new AppError(
-        `Failed to upload file to MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
+        `Failed to upload file to MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'MINIO_UPLOAD_FAILED'
       )
     }
@@ -225,7 +225,7 @@ export class MinioStorageService {
 
     if (!this.client) {
       console.error('[MinioService] ❌ Delete failed - client not initialized')
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     try {
@@ -252,8 +252,8 @@ export class MinioStorageService {
       })
 
       throw new AppError(
-        `Failed to delete file from MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
+        `Failed to delete file from MinIO: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'MINIO_DELETE_FAILED'
       )
     }
@@ -267,7 +267,7 @@ export class MinioStorageService {
     const filename = filenameParts.join('/')
 
     if (!bucket || !filename) {
-      throw new AppError('Invalid file path', 400, 'INVALID_PATH')
+      throw new AppError(400, 'Invalid file path', 'INVALID_PATH')
     }
 
     await this.deleteFile(bucket, filename)
@@ -278,7 +278,7 @@ export class MinioStorageService {
    */
   async getPresignedUrl(bucket: string, filename: string, expirySeconds = 604800): Promise<string> {
     if (!this.client) {
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     try {
@@ -286,8 +286,8 @@ export class MinioStorageService {
     } catch (error) {
       console.error('MinIO presigned URL error:', error)
       throw new AppError(
-        `Failed to generate presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
+        `Failed to generate presigned URL: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'MINIO_PRESIGN_FAILED'
       )
     }
@@ -298,7 +298,7 @@ export class MinioStorageService {
    */
   async listFiles(bucket: string, prefix?: string): Promise<string[]> {
     if (!this.client) {
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     try {
@@ -317,8 +317,8 @@ export class MinioStorageService {
     } catch (error) {
       console.error('MinIO list error:', error)
       throw new AppError(
-        `Failed to list files: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
+        `Failed to list files: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'MINIO_LIST_FAILED'
       )
     }
@@ -336,7 +336,7 @@ export class MinioStorageService {
    */
   async getFileStats(bucket: string, filename: string): Promise<Minio.BucketItemStat> {
     if (!this.client) {
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     try {
@@ -344,8 +344,8 @@ export class MinioStorageService {
     } catch (error) {
       console.error('MinIO stat error:', error)
       throw new AppError(
-        `Failed to get file stats: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
+        `Failed to get file stats: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'MINIO_STAT_FAILED'
       )
     }
@@ -365,7 +365,7 @@ export class MinioStorageService {
 
     if (!this.client) {
       console.error('[MinioService] ❌ Download failed - client not initialized')
-      throw new AppError('MinIO client not initialized', 500, 'MINIO_NOT_CONFIGURED')
+      throw new AppError(500, 'MinIO client not initialized', 'MINIO_NOT_CONFIGURED')
     }
 
     try {
@@ -423,8 +423,8 @@ export class MinioStorageService {
       })
 
       throw new AppError(
-        `Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`,
         500,
+        `Failed to download file: ${error instanceof Error ? error.message : 'Unknown error'}`,
         'MINIO_DOWNLOAD_FAILED'
       )
     }

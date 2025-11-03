@@ -164,7 +164,7 @@ export class SoundEffectsService {
       throw new Error('Sound effects service not available - API key not configured')
     }
 
-    const { text, durationSeconds = null, promptInfluence = 0.3, loop = false } = options
+    const { text, durationSeconds = null, promptInfluence = 0.3 } = options
 
     try {
       console.log('[SoundEffectsService] 📡 Calling ElevenLabs API', {

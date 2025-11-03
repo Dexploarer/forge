@@ -6,7 +6,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { ContentEmbedderService } from '../services/content-embedder.service'
-import { qdrantService } from '../services/qdrant.service'
 
 // ============================================================================
 // Schemas
@@ -369,10 +368,16 @@ const embeddingsRoutes: FastifyPluginAsync = async (server) => {
 
       server.log.info(`[Embeddings API] Batch embedding ${items.length} ${contentType} items`)
 
-      // Use batch embedding
+      // Use batch embedding - map items to ensure strict optional property types
+      const mappedItems = items.map(item => ({
+        id: item.id,
+        data: item.data,
+        ...(item.metadata !== undefined && { metadata: item.metadata })
+      }))
+
       const result = await contentEmbedder.embedBatch(
         contentType as any,
-        items
+        mappedItems
       )
 
       const duration = Date.now() - startTime

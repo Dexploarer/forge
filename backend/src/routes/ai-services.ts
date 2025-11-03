@@ -365,7 +365,7 @@ const aiServicesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/generate-image', {
     preHandler: [fastify.authenticate],
     schema: {
-      description: 'Generate image using Google Gemini (multimodal image generation)',
+      description: 'Generate image using AI Gateway (multimodal image generation)',
       tags: ['ai-services'],
       body: z.object({
         prompt: z.string().min(1),
@@ -436,7 +436,7 @@ IMPORTANT: Return the image as a file, not as code or description.`
         prompt: imagePrompt,
       })
 
-      fastify.log.info(`[Image Generation] Gemini response - text length: ${result.text?.length || 0}, files: ${result.files?.length || 0}`)
+      fastify.log.info(`[Image Generation] AI Gateway response - text length: ${result.text?.length || 0}, files: ${result.files?.length || 0}`)
 
       // Extract image from result.files
       let assetId: string | undefined
@@ -446,7 +446,7 @@ IMPORTANT: Return the image as a file, not as code or description.`
           const imageBuffer = Buffer.from(imageFile.uint8Array)
           const mimeType = imageFile.mediaType || 'image/png'
           revisedPrompt = result.text || undefined
-          fastify.log.info('[Image Generation] Successfully extracted image from Gemini files')
+          fastify.log.info('[Image Generation] Successfully extracted image from AI Gateway response')
 
           // Try to upload to MinIO and create asset record
           try {
@@ -460,10 +460,10 @@ IMPORTANT: Return the image as a file, not as code or description.`
               )
 
               imageUrl = uploadResult.url
-              fastify.log.info('[Image Generation] Uploaded to MinIO', { url: imageUrl })
+              fastify.log.info({ url: imageUrl }, '[Image Generation] Uploaded to MinIO')
 
               // Create asset record with entity linkage
-              const assetTags = ['ai-generated', 'gemini']
+              const assetTags = ['ai-generated', 'image-generation']
               const assetMetadata: Record<string, any> = {}
 
               if (entityType) {
@@ -506,7 +506,7 @@ IMPORTANT: Return the image as a file, not as code or description.`
 
               if (asset) {
                 assetId = asset.id
-                fastify.log.info('[Image Generation] Created asset record', { assetId })
+                fastify.log.info({ assetId }, '[Image Generation] Created asset record')
               }
             } else {
               // Fallback to base64 if MinIO is not available
@@ -516,22 +516,22 @@ IMPORTANT: Return the image as a file, not as code or description.`
             }
           } catch (uploadError) {
             // Log error but don't fail the request - fallback to base64
-            fastify.log.error('[Image Generation] Failed to upload to MinIO or create asset', uploadError)
+            fastify.log.error({ error: uploadError }, '[Image Generation] Failed to upload to MinIO or create asset')
             const base64Image = imageBuffer.toString('base64')
             imageUrl = `data:${mimeType};base64,${base64Image}`
           }
         } else {
-          fastify.log.warn('[Image Generation] Gemini returned files but no image file found', { fileTypes: result.files.map((f: any) => f.mediaType) })
-          throw new Error('Gemini returned files but no image file was found')
+          fastify.log.warn({ fileTypes: result.files.map((f: any) => f.mediaType) }, '[Image Generation] AI Gateway returned files but no image file found')
+          throw new Error('AI Gateway returned files but no image file was found')
         }
       } else {
-        fastify.log.error('[Image Generation] Gemini did not return any image files', { textResponse: result.text?.substring(0, 500) })
-        throw new Error(`Gemini did not generate an image file. Response: ${result.text?.substring(0, 200)}`)
+        fastify.log.error({ textResponse: result.text?.substring(0, 500) }, '[Image Generation] AI Gateway did not return any image files')
+        throw new Error(`AI Gateway did not generate an image file. Response: ${result.text?.substring(0, 200)}`)
       }
 
-      // Calculate cost - Gemini image models are $0.30 per 1M tokens
-      // Cost is stored as integer in cents: $0.30 per 1M tokens = 30 cents per 1M tokens
-      // For 1000 tokens: 30 * (1000 / 1000000) = 0.03 cents
+      // Calculate cost - AI Gateway image models pricing
+      // Cost is stored as integer in cents
+      // For image generation: estimated minimal cost
       const cost = Math.round(30 * (1000 / 1000000)) // 0 cents (very small cost)
 
       // Record usage (don't store full base64 image to avoid DB size issues)
