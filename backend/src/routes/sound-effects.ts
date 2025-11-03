@@ -53,6 +53,13 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       projectId?: string
       status?: 'draft' | 'processing' | 'published' | 'failed'
     }
+
+    fastify.log.info({
+      userId: request.user?.id,
+      filters: { category, subcategory, projectId, status },
+      pagination: { page, limit },
+    }, '[SFX] Listing sound effects with filters')
+
     const offset = (page - 1) * limit
 
     const conditions = []
@@ -89,6 +96,13 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       .where(whereClause)
 
     const total = Number(countResult[0]?.count ?? 0)
+
+    fastify.log.info({
+      resultCount: sfx.length,
+      totalCount: total,
+      page,
+      limit,
+    }, '[SFX] Retrieved sound effects list')
 
     return {
       sfx: sfx.map(s => serializeAllTimestamps(s)),
@@ -143,6 +157,8 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user?.id, sfxId: id }, '[SFX] Fetching sound effect details')
+
     const sfx = await fastify.db.query.soundEffects.findFirst({
       where: eq(soundEffects.id, id),
       with: {
@@ -156,15 +172,24 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     })
 
     if (!sfx) {
+      fastify.log.warn({ sfxId: id }, '[SFX] Sound effect not found')
       throw new NotFoundError('Sound effect not found')
     }
 
     // Check access
     if (sfx.status !== 'published') {
       if (!request.user || sfx.ownerId !== request.user.id) {
+        fastify.log.warn({ sfxId: id, userId: request.user?.id }, '[SFX] Access denied to unpublished sound effect')
         throw new ForbiddenError('Access denied')
       }
     }
+
+    fastify.log.info({
+      sfxId: id,
+      sfxName: sfx.name,
+      status: sfx.status,
+      duration: sfx.duration,
+    }, '[SFX] Sound effect details retrieved')
 
     return { sfx: serializeAllTimestamps(sfx) }
   })
@@ -218,6 +243,14 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       metadata?: Record<string, any>
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      sfxName: data.name,
+      category: data.category,
+      subcategory: data.subcategory,
+      spatialAudio: data.spatialAudio,
+    }, '[SFX] Creating new sound effect')
+
     const [sfx] = await fastify.db.insert(soundEffects).values({
       ...data,
       ownerId: request.user!.id,
@@ -226,6 +259,12 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       tags: data.tags || [],
       metadata: data.metadata || {},
     }).returning()
+
+    fastify.log.info({
+      sfxId: sfx!.id,
+      sfxName: sfx!.name,
+      status: sfx!.status,
+    }, '[SFX] Sound effect created successfully')
 
     reply.code(201).send({ sfx: serializeAllTimestamps(sfx!) })
   })
@@ -267,15 +306,23 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string }
     const updates = request.body as Record<string, any>
 
+    fastify.log.info({
+      userId: request.user!.id,
+      sfxId: id,
+      updatedFields: Object.keys(updates),
+    }, '[SFX] Updating sound effect')
+
     const sfx = await fastify.db.query.soundEffects.findFirst({
       where: eq(soundEffects.id, id)
     })
 
     if (!sfx) {
+      fastify.log.warn({ sfxId: id }, '[SFX] Sound effect not found for update')
       throw new NotFoundError('Sound effect not found')
     }
 
     if (sfx.ownerId !== request.user!.id) {
+      fastify.log.warn({ sfxId: id, userId: request.user!.id }, '[SFX] Unauthorized update attempt')
       throw new ForbiddenError('Only the owner can update this sound effect')
     }
 
@@ -287,6 +334,12 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       })
       .where(eq(soundEffects.id, id))
       .returning()
+
+    fastify.log.info({
+      sfxId: id,
+      sfxName: updatedSfx!.name,
+      updatedFields: Object.keys(updates),
+    }, '[SFX] Sound effect updated successfully')
 
     return { sfx: serializeAllTimestamps(updatedSfx!) }
   })
@@ -315,15 +368,19 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user!.id, sfxId: id }, '[SFX] Starting file upload')
+
     const sfx = await fastify.db.query.soundEffects.findFirst({
       where: eq(soundEffects.id, id)
     })
 
     if (!sfx) {
+      fastify.log.warn({ sfxId: id }, '[SFX] Sound effect not found for upload')
       throw new NotFoundError('Sound effect not found')
     }
 
     if (sfx.ownerId !== request.user!.id) {
+      fastify.log.warn({ sfxId: id, userId: request.user!.id }, '[SFX] Unauthorized upload attempt')
       throw new ForbiddenError('Only the owner can upload files')
     }
 
@@ -332,6 +389,12 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!data) {
       throw new ValidationError('No file uploaded')
     }
+
+    fastify.log.info({
+      sfxId: id,
+      filename: data.filename,
+      mimetype: data.mimetype,
+    }, '[SFX] File received, validating')
 
     if (!minioStorageService.validateFileType(data.mimetype, ['audio', 'mp3', 'wav', 'ogg'])) {
       throw new ValidationError('Invalid file type for sound effect')
@@ -344,10 +407,17 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('File too large (max 20MB)')
     }
 
+    fastify.log.info({
+      sfxId: id,
+      fileSize: buffer.length,
+      fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2),
+    }, '[SFX] File validated, uploading to MinIO')
+
     // Delete old file if exists
     if (sfx.audioUrl) {
       const metadata = sfx.metadata as Record<string, any>
       if (metadata?.minioPath) {
+        fastify.log.info({ sfxId: id, oldPath: metadata.minioPath }, '[SFX] Deleting old file')
         await minioStorageService.deleteFileByPath(metadata.minioPath)
       }
     }
@@ -360,6 +430,12 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     )
 
     const metadata = await audioProcessorService.extractMetadata(buffer)
+
+    fastify.log.info({
+      sfxId: id,
+      duration: metadata.duration,
+      minioPath: minioData.path,
+    }, '[SFX] File uploaded, extracting metadata')
 
     const [updatedSfx] = await fastify.db
       .update(soundEffects)
@@ -380,6 +456,13 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       })
       .where(eq(soundEffects.id, id))
       .returning()
+
+    fastify.log.info({
+      sfxId: id,
+      sfxName: updatedSfx!.name,
+      fileSize: buffer.length,
+      duration: updatedSfx!.duration,
+    }, '[SFX] File upload completed successfully')
 
     return { sfx: serializeAllTimestamps(updatedSfx!) }
   })
@@ -563,15 +646,23 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string }
     const { name } = request.body as { name?: string }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      originalSfxId: id,
+      newName: name,
+    }, '[SFX] Duplicating sound effect')
+
     const original = await fastify.db.query.soundEffects.findFirst({
       where: eq(soundEffects.id, id)
     })
 
     if (!original) {
+      fastify.log.warn({ sfxId: id }, '[SFX] Sound effect not found for duplication')
       throw new NotFoundError('Sound effect not found')
     }
 
     if (original.ownerId !== request.user!.id) {
+      fastify.log.warn({ sfxId: id, userId: request.user!.id }, '[SFX] Unauthorized duplication attempt')
       throw new ForbiddenError('Only the owner can duplicate this sound effect')
     }
 
@@ -593,6 +684,13 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
       updatedAt: new Date(),
     }).returning()
 
+    fastify.log.info({
+      originalSfxId: id,
+      duplicateSfxId: duplicate!.id,
+      duplicateName: duplicate!.name,
+      variationIndex,
+    }, '[SFX] Sound effect duplicated successfully')
+
     reply.code(201).send({ sfx: serializeAllTimestamps(duplicate!) })
   })
 
@@ -612,26 +710,33 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user!.id, sfxId: id }, '[SFX] Deleting sound effect')
+
     const sfx = await fastify.db.query.soundEffects.findFirst({
       where: eq(soundEffects.id, id)
     })
 
     if (!sfx) {
+      fastify.log.warn({ sfxId: id }, '[SFX] Sound effect not found for deletion')
       throw new NotFoundError('Sound effect not found')
     }
 
     if (sfx.ownerId !== request.user!.id && request.user!.role !== 'admin') {
+      fastify.log.warn({ sfxId: id, userId: request.user!.id }, '[SFX] Unauthorized deletion attempt')
       throw new ForbiddenError('Only the owner or admin can delete this sound effect')
     }
 
     if (sfx.audioUrl) {
       const metadata = sfx.metadata as Record<string, any>
       if (metadata?.minioPath) {
+        fastify.log.info({ sfxId: id, minioPath: metadata.minioPath }, '[SFX] Deleting file from MinIO')
         await minioStorageService.deleteFileByPath(metadata.minioPath)
       }
     }
 
     await fastify.db.delete(soundEffects).where(eq(soundEffects.id, id))
+
+    fastify.log.info({ sfxId: id, sfxName: sfx.name }, '[SFX] Sound effect deleted successfully')
 
     reply.code(204).send()
   })

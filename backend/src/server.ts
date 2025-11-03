@@ -11,6 +11,7 @@ import { env } from './config/env'
 // Plugins
 import databasePlugin from './plugins/database'
 import corsPlugin from './plugins/cors'
+import requestLoggerPlugin from './plugins/request-logger'
 import authPlugin from './plugins/auth'
 import swaggerPlugin from './plugins/swagger'
 import multipartPlugin from './plugins/multipart'
@@ -88,6 +89,7 @@ export async function buildServer() {
   // Register plugins
   await server.register(corsPlugin)
   await server.register(databasePlugin)
+  await server.register(requestLoggerPlugin)
   await server.register(authPlugin)
   await server.register(apiKeyAuthPlugin)
   await server.register(swaggerPlugin)

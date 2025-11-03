@@ -4,6 +4,84 @@ import { env } from '../config/env'
 import * as schema from './schema'
 
 // =====================================================
+// QUERY LOGGING
+// =====================================================
+
+class QueryLogger {
+  private queryCount = 0
+  private slowQueryThreshold = 100 // ms
+
+  logQuery(query: string, params: unknown[], duration?: number) {
+    this.queryCount++
+
+    // Sanitize sensitive data from query parameters
+    const sanitizedParams = this.sanitizeParams(params)
+
+    if (duration !== undefined) {
+      if (duration > this.slowQueryThreshold) {
+        console.warn('[DB] 🐌 Slow query detected', {
+          query: this.truncateQuery(query),
+          params: sanitizedParams,
+          durationMs: duration,
+          threshold: this.slowQueryThreshold,
+          queryNumber: this.queryCount,
+        })
+      } else if (env.LOG_LEVEL === 'debug') {
+        console.log('[DB] 🔍 Query executed', {
+          query: this.truncateQuery(query),
+          params: sanitizedParams,
+          durationMs: duration,
+          queryNumber: this.queryCount,
+        })
+      }
+    }
+  }
+
+  private sanitizeParams(params: unknown[]): unknown[] {
+    return params.map((param) => {
+      if (typeof param === 'string' && param.length > 100) {
+        return param.substring(0, 100) + '...[truncated]'
+      }
+      // Hide potential passwords or tokens
+      if (typeof param === 'string' && (
+        param.includes('password') ||
+        param.includes('token') ||
+        param.includes('secret') ||
+        param.includes('key')
+      )) {
+        return '[REDACTED]'
+      }
+      return param
+    })
+  }
+
+  private truncateQuery(query: string): string {
+    if (query.length > 200) {
+      return query.substring(0, 200) + '...[truncated]'
+    }
+    return query
+  }
+
+  getQueryCount(): number {
+    return this.queryCount
+  }
+
+  reset(): void {
+    this.queryCount = 0
+  }
+}
+
+export const queryLogger = new QueryLogger()
+
+// Custom Drizzle logger
+const drizzleLogger = {
+  logQuery(query: string, params: unknown[]): void {
+    // Log query (Drizzle doesn't provide execution time in the logger callback)
+    queryLogger.logQuery(query, params)
+  }
+}
+
+// =====================================================
 // DATABASE CONNECTION
 // =====================================================
 
@@ -28,6 +106,14 @@ const queryClient = postgres(env.DATABASE_URL, {
   // Prepared statements management (better performance)
   prepare: true,           // Enable prepared statements
 
+  // Debug logging for queries
+  debug: env.LOG_LEVEL === 'debug' ? (_connection: number, query: string, params: any[]) => {
+    console.log('[DB] 🔧 postgres-js query', {
+      query: query.substring(0, 200),
+      paramCount: params?.length || 0,
+    })
+  } : false,
+
   // Connection lifecycle callbacks for debugging
   onnotice: (notice) => {
     if (env.LOG_LEVEL === 'debug') {
@@ -44,8 +130,11 @@ const queryClient = postgres(env.DATABASE_URL, {
 // Migration client (single connection for migrations)
 export const migrationClient = postgres(env.DATABASE_URL, { max: 1 })
 
-// Create Drizzle instance with schema
-export const db = drizzle(queryClient, { schema })
+// Create Drizzle instance with schema and logger
+export const db = drizzle(queryClient, {
+  schema,
+  logger: env.LOG_LEVEL === 'debug' ? drizzleLogger : false,
+})
 
 // Export types for external use
 export type Database = typeof db

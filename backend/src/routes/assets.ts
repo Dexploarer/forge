@@ -4,11 +4,10 @@ import { eq, and, or, desc, sql } from 'drizzle-orm'
 import { assets } from '../database/schema'
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
 import { fileStorageService } from '../services/file.service'
-import { fileServerClient } from '../services/file-server-client.service'
 import { minioStorageService } from '../services/minio.service'
 import { processImageGeneration } from '../services/image-generation.processor'
 import { imgproxyService } from '../services/imgproxy.service'
-import { getImageVariants, getThumbnailUrl, getOptimizedUrl } from '../utils/image-url'
+import { getImageVariants, getOptimizedUrl } from '../utils/image-url'
 
 const assetRoutes: FastifyPluginAsync = async (fastify) => {
   // List assets
@@ -54,6 +53,13 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       status?: 'draft' | 'processing' | 'published' | 'failed'
       ownerId?: string
     }
+
+    fastify.log.info({
+      userId: request.user?.id,
+      filters: { type, status, ownerId },
+      pagination: { page, limit },
+    }, '[Assets] Listing assets with filters')
+
     const offset = (page - 1) * limit
 
     // Build where conditions
@@ -95,6 +101,13 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       .where(whereClause)
 
     const total = Number(countResult[0]?.count ?? 0)
+
+    fastify.log.info({
+      resultCount: assetsList.length,
+      totalCount: total,
+      page,
+      limit,
+    }, '[Assets] Retrieved assets list')
 
     return {
       assets: assetsList.map(asset => {
@@ -232,6 +245,13 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       tags?: string[]
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      assetName: data.name,
+      assetType: data.type,
+      visibility: data.visibility,
+    }, '[Assets] Creating new asset')
+
     const [asset] = await fastify.db.insert(assets).values({
       ...data,
       ownerId: request.user!.id,
@@ -239,6 +259,12 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       metadata: data.metadata || {},
       tags: data.tags || [],
     }).returning()
+
+    fastify.log.info({
+      assetId: asset!.id,
+      assetName: asset!.name,
+      assetType: asset!.type,
+    }, '[Assets] Asset created successfully')
 
     reply.code(201).send({ asset })
   })
@@ -328,15 +354,19 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user!.id, assetId: id }, '[Assets] Starting file upload')
+
     const asset = await fastify.db.query.assets.findFirst({
       where: eq(assets.id, id)
     })
 
     if (!asset) {
+      fastify.log.warn({ assetId: id }, '[Assets] Asset not found for upload')
       throw new NotFoundError('Asset not found')
     }
 
     if (asset.ownerId !== request.user!.id) {
+      fastify.log.warn({ assetId: id, userId: request.user!.id }, '[Assets] Unauthorized upload attempt')
       throw new ForbiddenError('Only the owner can upload files')
     }
 
@@ -345,6 +375,13 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     if (!data) {
       throw new ValidationError('No file uploaded')
     }
+
+    fastify.log.info({
+      assetId: id,
+      filename: data.filename,
+      mimetype: data.mimetype,
+      assetType: asset.type,
+    }, '[Assets] File received, validating')
 
     const allowedTypes: Record<string, string[]> = {
       model: ['model', 'gltf', 'glb'],
@@ -369,6 +406,12 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       throw new ValidationError('File too large (max 50MB)')
     }
 
+    fastify.log.info({
+      assetId: id,
+      fileSize: buffer.length,
+      fileSizeMB: (buffer.length / 1024 / 1024).toFixed(2),
+    }, '[Assets] File validated')
+
     // Delete old file if exists
     if (asset.fileUrl) {
       // Try to delete from MinIO first (if path looks like bucket/filename)
@@ -385,11 +428,13 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     let minioData: { path: string; url: string; filename: string; bucket: string } | null = null
     if (minioStorageService.isAvailable()) {
       try {
+        fastify.log.info({ assetId: id }, '[Assets] Uploading to MinIO')
         minioData = await minioStorageService.uploadFile(
           buffer,
           data.mimetype,
           data.filename
         )
+        fastify.log.info({ assetId: id, minioPath: minioData.path }, '[Assets] MinIO upload successful')
       } catch (minioError) {
         fastify.log.error({ error: minioError }, '[Assets] MinIO upload failed')
         throw new ValidationError('Failed to upload file to storage')
@@ -399,6 +444,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     // Fallback to local storage if MinIO not available
     let localFileData: { path: string; url: string; filename: string } | null = null
     if (!minioData) {
+      fastify.log.info({ assetId: id }, '[Assets] Uploading to local storage (MinIO not available)')
       localFileData = await fileStorageService.saveFile(
         buffer,
         data.mimetype,
@@ -412,6 +458,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const imgproxyMetadata: Record<string, any> = {}
 
     if (isImage && imgproxyService.isAvailable()) {
+      fastify.log.info({ assetId: id }, '[Assets] Generating imgproxy URLs')
       const variants = getImageVariants(sourceUrl)
       if (variants) {
         imgproxyMetadata.imgproxy = {
@@ -454,6 +501,13 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       .where(eq(assets.id, id))
       .returning()
 
+    fastify.log.info({
+      assetId: id,
+      assetName: updatedAsset!.name,
+      fileSize: buffer.length,
+      storageMode: minioData ? 'minio' : 'local',
+    }, '[Assets] File upload completed successfully')
+
     return { asset: updatedAsset }
   })
 
@@ -473,15 +527,19 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user!.id, assetId: id }, '[Assets] Deleting asset')
+
     const asset = await fastify.db.query.assets.findFirst({
       where: eq(assets.id, id)
     })
 
     if (!asset) {
+      fastify.log.warn({ assetId: id }, '[Assets] Asset not found for deletion')
       throw new NotFoundError('Asset not found')
     }
 
     if (asset.ownerId !== request.user!.id && request.user!.role !== 'admin') {
+      fastify.log.warn({ assetId: id, userId: request.user!.id }, '[Assets] Unauthorized deletion attempt')
       throw new ForbiddenError('Only the owner or admin can delete this asset')
     }
 
@@ -492,23 +550,27 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       // Delete from MinIO if stored there
       if (metadata?.minioBucket && metadata?.minioPath) {
         try {
+          fastify.log.info({ assetId: id, minioPath: metadata.minioPath }, '[Assets] Deleting file from MinIO')
           await minioStorageService.deleteFileByPath(metadata.minioPath)
         } catch (error) {
-          fastify.log.warn({ error }, 'Failed to delete file from MinIO')
+          fastify.log.warn({ error, assetId: id }, '[Assets] Failed to delete file from MinIO')
         }
       }
 
       // Delete from local storage if it exists
       if (metadata?.localPath) {
         try {
+          fastify.log.info({ assetId: id, localPath: metadata.localPath }, '[Assets] Deleting local file')
           await fileStorageService.deleteFile(metadata.localPath)
         } catch (error) {
-          fastify.log.warn({ error }, 'Failed to delete local file')
+          fastify.log.warn({ error, assetId: id }, '[Assets] Failed to delete local file')
         }
       }
     }
 
     await fastify.db.delete(assets).where(eq(assets.id, id))
+
+    fastify.log.info({ assetId: id, assetName: asset.name }, '[Assets] Asset deleted successfully')
 
     reply.code(204).send()
   })
@@ -543,6 +605,14 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       style?: 'vivid' | 'natural'
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      assetName: data.name,
+      prompt: data.prompt.substring(0, 100),
+      size: data.size,
+      quality: data.quality,
+    }, '[Assets] Starting DALL-E image generation')
+
     // Create asset immediately
     const [asset] = await fastify.db.insert(assets).values({
       name: data.name,
@@ -563,6 +633,11 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     if (!asset) {
       throw new Error('Failed to create asset')
     }
+
+    fastify.log.info({
+      assetId: asset.id,
+      taskId: asset.id,
+    }, '[Assets] Asset created, starting async image generation')
 
     // Start async generation
     setImmediate(() => processImageGeneration(asset.id, data, fastify.db))

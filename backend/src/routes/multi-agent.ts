@@ -171,7 +171,15 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
 
     try {
       server.log.info(
-        { sessionId, npcCount: npcPersonas.length, collaborationType },
+        {
+          sessionId,
+          npcCount: npcPersonas.length,
+          collaborationType,
+          rounds: rounds || 5,
+          model: model || 'default',
+          enableCrossValidation: enableCrossValidation !== false,
+          npcNames: npcPersonas.map((n: any) => n.name),
+        },
         '[MultiAgent] Starting NPC collaboration'
       )
 
@@ -183,6 +191,8 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
         model: model || '',
         generateVoiceProfiles: true, // Enable voice profile generation
       })
+
+      server.log.info({ sessionId, npcCount: npcPersonas.length }, '[MultiAgent] Registering NPC agents')
 
       // Register each NPC as an agent
       for (const npc of npcPersonas) {
@@ -252,17 +262,32 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
       }
 
       // Run multi-agent conversation
-      server.log.info('[MultiAgent] Running conversation rounds...')
+      server.log.info({
+        sessionId,
+        initialPrompt: initialPrompt.substring(0, 100),
+        maxRounds: rounds || 5,
+      }, '[MultiAgent] Running conversation rounds')
       const result = await orchestrator.runConversationRound(initialPrompt)
 
       const duration = Date.now() - startTime
       server.log.info(
-        { sessionId, rounds: result.rounds.length, duration },
+        {
+          sessionId,
+          actualRounds: result.rounds.length,
+          durationMs: duration,
+          hasEmergentContent: Boolean(result.emergentContent),
+          emergentContentTypes: Object.keys(result.emergentContent || {}),
+        },
         '[MultiAgent] Collaboration completed'
       )
 
       // Get orchestrator stats
       const stats = orchestrator.getStats()
+
+      server.log.info({
+        sessionId,
+        stats,
+      }, '[MultiAgent] Orchestrator stats collected')
 
       return {
         sessionId,
@@ -283,7 +308,15 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
       }
     } catch (error: any) {
       const duration = Date.now() - startTime
-      server.log.error({ error, sessionId, duration }, '[MultiAgent] Collaboration failed')
+      server.log.error({
+        error,
+        sessionId,
+        durationMs: duration,
+        npcCount: npcPersonas.length,
+        collaborationType,
+        errorMessage: error.message,
+        errorStack: error.stack,
+      }, '[MultiAgent] Collaboration failed')
       return reply.code(500).send({
         error: 'Failed to generate multi-agent NPC collaboration',
         details: error.message
@@ -348,7 +381,11 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
     }
 
     const duration = Date.now() - startTime
-    server.log.info({ count: Object.keys(TESTER_PERSONAS).length, duration }, '[MultiAgent] Personas fetched')
+    server.log.info({
+      totalPersonas: Object.keys(TESTER_PERSONAS).length,
+      validPersonas: Object.keys(transformedPersonas).length,
+      durationMs: duration,
+    }, '[MultiAgent] Personas fetched and transformed')
 
     return {
       availablePersonas: Object.keys(TESTER_PERSONAS),

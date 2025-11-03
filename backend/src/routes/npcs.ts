@@ -70,6 +70,13 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       status?: string
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      projectId,
+      filters: { race, faction, behavior, location, status },
+      pagination: { page, limit },
+    }, '[NPCs] Listing NPCs with filters')
+
     // Verify project membership if projectId is provided
     if (projectId) {
       await verifyProjectMembership(fastify, projectId, request)
@@ -124,6 +131,13 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       .where(whereClause)
 
     const total = Number(countResult[0]?.count ?? 0)
+
+    fastify.log.info({
+      resultCount: npcsList.length,
+      totalCount: total,
+      page,
+      limit,
+    }, '[NPCs] Retrieved NPC list')
 
     return {
       npcs: npcsList.map(n => serializeAllTimestamps(n)),
@@ -185,6 +199,15 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const data = request.body as any
 
+    fastify.log.info({
+      userId: request.user!.id,
+      npcName: data.name,
+      race: data.race,
+      class: data.class,
+      level: data.level,
+      behavior: data.behavior,
+    }, '[NPCs] Creating new NPC')
+
     // Get or create default project if projectId not provided
     const projectId = data.projectId || await getOrCreateDefaultProject(fastify, request.user!.id)
 
@@ -200,6 +223,12 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
     if (!npc) {
       throw new Error('Failed to create NPC')
     }
+
+    fastify.log.info({
+      npcId: npc.id,
+      npcName: npc.name,
+      projectId: npc.projectId,
+    }, '[NPCs] NPC created successfully')
 
     // Auto-generate and store embedding for semantic search
     try {
@@ -217,6 +246,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
         .join(' | ')
 
       if (embeddingText) {
+        fastify.log.info({ npcId: npc.id, textLength: embeddingText.length }, '[NPCs] Storing NPC embedding')
         await embeddingsService.storeEmbedding({
           contentType: 'npc',
           contentId: npc.id,
@@ -232,9 +262,10 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
             projectId: npc.projectId,
           },
         })
+        fastify.log.info({ npcId: npc.id }, '[NPCs] NPC embedding stored successfully')
       }
     } catch (error) {
-      fastify.log.error({ error, npcId: npc.id }, 'Failed to store NPC embedding')
+      fastify.log.error({ error, npcId: npc.id }, '[NPCs] Failed to store NPC embedding')
       // Don't fail the request if embedding fails
     }
 
@@ -261,15 +292,20 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user!.id, npcId: id }, '[NPCs] Fetching NPC details')
+
     const npc = await fastify.db.query.npcs.findFirst({
       where: eq(npcs.id, id)
     })
 
     if (!npc) {
+      fastify.log.warn({ npcId: id }, '[NPCs] NPC not found')
       throw new NotFoundError('NPC not found')
     }
 
     await verifyProjectMembership(fastify, npc.projectId, request)
+
+    fastify.log.info({ npcId: id, npcName: npc.name }, '[NPCs] NPC details retrieved')
 
     return { npc: serializeAllTimestamps(npc) }
   })
@@ -300,11 +336,18 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
     const { id } = request.params as { id: string }
     const updates = request.body as Record<string, any>
 
+    fastify.log.info({
+      userId: request.user!.id,
+      npcId: id,
+      updatedFields: Object.keys(updates),
+    }, '[NPCs] Updating NPC')
+
     const npc = await fastify.db.query.npcs.findFirst({
       where: eq(npcs.id, id)
     })
 
     if (!npc) {
+      fastify.log.warn({ npcId: id }, '[NPCs] NPC not found for update')
       throw new NotFoundError('NPC not found')
     }
 
@@ -322,6 +365,12 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
     if (!updatedNpc) {
       throw new NotFoundError('NPC not found')
     }
+
+    fastify.log.info({
+      npcId: id,
+      npcName: updatedNpc.name,
+      updatedFields: Object.keys(updates),
+    }, '[NPCs] NPC updated successfully')
 
     return { npc: serializeAllTimestamps(updatedNpc) }
   })
@@ -344,17 +393,22 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
   }, async (request, reply) => {
     const { id } = request.params as { id: string }
 
+    fastify.log.info({ userId: request.user!.id, npcId: id }, '[NPCs] Deleting NPC')
+
     const npc = await fastify.db.query.npcs.findFirst({
       where: eq(npcs.id, id)
     })
 
     if (!npc) {
+      fastify.log.warn({ npcId: id }, '[NPCs] NPC not found for deletion')
       throw new NotFoundError('NPC not found')
     }
 
     await verifyProjectMembership(fastify, npc.projectId, request)
 
     await fastify.db.delete(npcs).where(eq(npcs.id, id))
+
+    fastify.log.info({ npcId: id, npcName: npc.name }, '[NPCs] NPC deleted successfully')
 
     reply.code(204).send()
   })
@@ -496,11 +550,19 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       autoAssign?: boolean
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      npcId: id,
+      model: model || 'gpt-4o-mini',
+      autoAssign,
+    }, '[NPCs] Generating voice profile for NPC')
+
     const npc = await fastify.db.query.npcs.findFirst({
       where: eq(npcs.id, id)
     })
 
     if (!npc) {
+      fastify.log.warn({ npcId: id }, '[NPCs] NPC not found for voice profile generation')
       throw new NotFoundError('NPC not found')
     }
 
@@ -508,6 +570,13 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Import voice profile generator service
     const { voiceProfileGeneratorService } = await import('../services/voice-profile-generator.service')
+
+    fastify.log.info({
+      npcId: id,
+      npcName: npc.name,
+      race: npc.race,
+      class: npc.class,
+    }, '[NPCs] Starting voice profile generation with AI')
 
     // Create voice profile based on NPC characteristics
     const profile = await voiceProfileGeneratorService.createVoiceProfileForNPC(
@@ -525,6 +594,14 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       model || 'gpt-4o-mini'
     )
 
+    fastify.log.info({
+      npcId: id,
+      voiceProfileId: profile.id,
+      gender: profile.gender,
+      age: profile.age,
+      accent: profile.accent,
+    }, '[NPCs] Voice profile generated successfully')
+
     // Auto-assign to NPC if requested
     let assigned = false
     if (autoAssign !== false) {
@@ -537,6 +614,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
         .where(eq(npcs.id, id))
 
       assigned = true
+      fastify.log.info({ npcId: id, voiceProfileId: profile.id }, '[NPCs] Voice profile auto-assigned to NPC')
     }
 
     // Extract reasoning from metadata
@@ -734,6 +812,14 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       contextLimit: number
     }
 
+    fastify.log.info({
+      userId: request.user!.id,
+      prompt: prompt.substring(0, 100),
+      useContext,
+      contextLimit,
+      projectId: providedProjectId,
+    }, '[NPCs] Starting AI NPC generation')
+
     // Use provided projectId or create a temporary context-less generation
     const projectId = providedProjectId || null
 
@@ -748,6 +834,7 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
       // Get context if requested and projectId is available
       let contextText = ''
       if (useContext && projectId) {
+        fastify.log.info({ projectId, contextLimit }, '[NPCs] Fetching semantic context for NPC generation')
         const similarContent = await embeddingsService.findSimilar(
           fastify.db,
           prompt,
@@ -757,10 +844,13 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
         )
 
         if (similarContent.length > 0) {
+          fastify.log.info({ contextCount: similarContent.length }, '[NPCs] Found relevant context for NPC generation')
           contextText = '\n\nRelevant context from existing game content:\n'
           similarContent.forEach((item) => {
             contextText += `\n[${item.type.toUpperCase()}] ${item.content.substring(0, 200)}...\n`
           })
+        } else {
+          fastify.log.info('[NPCs] No relevant context found, generating without context')
         }
       }
 
@@ -799,6 +889,8 @@ Return a JSON object with the following structure:
 
 Make the NPC interesting, balanced, and appropriate for an RPG game.${contextText}`
 
+      fastify.log.info({ promptLength: prompt.length, systemPromptLength: systemPrompt.length }, '[NPCs] Calling Claude for NPC generation')
+
       // Generate NPC with Claude
       const responseText = await aiService.generateWithClaude(
         prompt,
@@ -810,17 +902,27 @@ Make the NPC interesting, balanced, and appropriate for an RPG game.${contextTex
         }
       )
 
+      fastify.log.info({ responseLength: responseText.length }, '[NPCs] Received AI response for NPC generation')
+
       // Parse JSON response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/)
       if (!jsonMatch) {
+        fastify.log.error({ responseText: responseText.substring(0, 500) }, '[NPCs] Failed to parse AI response - no JSON found')
         throw new Error('Failed to parse AI response')
       }
 
       const generatedNpc = JSON.parse(jsonMatch[0])
 
+      fastify.log.info({
+        npcName: generatedNpc.name,
+        race: generatedNpc.race,
+        class: generatedNpc.class,
+        level: generatedNpc.level,
+      }, '[NPCs] NPC generated successfully with AI')
+
       reply.code(201).send({ npc: generatedNpc })
     } catch (error) {
-      fastify.log.error({ error, prompt }, 'NPC generation failed')
+      fastify.log.error({ error, prompt: prompt.substring(0, 100) }, '[NPCs] NPC generation failed')
       throw new Error(`NPC generation failed: ${(error as Error).message}`)
     }
   })
