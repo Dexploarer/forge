@@ -129,7 +129,25 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
           npcCount: z.number(),
           rounds: z.number(),
           conversation: z.array(z.any()),
-          emergentContent: z.any(),
+          emergentContent: z.object({
+            relationships: z.array(z.any()),
+            questIdeas: z.array(z.any()),
+            loreFragments: z.array(z.any()),
+            dialogueSnippets: z.array(z.any()),
+            voiceProfiles: z.array(z.object({
+              agentId: z.string(),
+              agentName: z.string(),
+              recommendation: z.object({
+                name: z.string(),
+                description: z.string(),
+                gender: z.enum(['male', 'female', 'neutral']),
+                age: z.enum(['child', 'young', 'adult', 'elderly']),
+                accent: z.string().optional(),
+                tone: z.string(),
+                reasoning: z.string(),
+              }),
+            })).optional(),
+          }),
           validation: z.any().optional(),
           stats: z.any(),
           metadata: z.any(),
@@ -162,7 +180,8 @@ export default async function multiAgentRoutes(server: FastifyInstance) {
         maxRounds: rounds || 5,
         temperature: 0.8,
         enableCrossValidation: enableCrossValidation !== false,
-        model: model || ''
+        model: model || '',
+        generateVoiceProfiles: true, // Enable voice profile generation
       })
 
       // Register each NPC as an agent

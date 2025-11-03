@@ -69,6 +69,19 @@ export interface EmergentContent {
     agent: string
     samples: string[]
   }>
+  voiceProfiles?: Array<{
+    agentId: string
+    agentName: string
+    recommendation: {
+      name: string
+      description: string
+      gender: 'male' | 'female' | 'neutral'
+      age: 'child' | 'young' | 'adult' | 'elderly'
+      accent?: string
+      tone: string
+      reasoning: string
+    }
+  }>
 }
 
 export interface ValidationResult {
@@ -101,6 +114,7 @@ export interface OrchestratorConfig {
   temperature?: number
   enableCrossValidation?: boolean
   model?: string
+  generateVoiceProfiles?: boolean
 }
 
 export interface SharedMemory {
@@ -133,6 +147,7 @@ export class MultiAgentOrchestrator {
       temperature: config.temperature || 0.8,
       enableCrossValidation: config.enableCrossValidation !== false,
       model: config.model || '',
+      generateVoiceProfiles: config.generateVoiceProfiles !== false,
     }
     this.aiService = new AISDKService()
   }
@@ -284,6 +299,11 @@ export class MultiAgentOrchestrator {
 
     // Extract emergent content (relationships, quests, lore)
     result.emergentContent = this.extractEmergentContent(result.rounds)
+
+    // Generate voice profiles if enabled
+    if (this.config.generateVoiceProfiles) {
+      result.emergentContent.voiceProfiles = await this.generateVoiceProfilesForAgents()
+    }
 
     // Perform cross-validation if enabled
     if (this.config.enableCrossValidation) {
@@ -538,6 +558,60 @@ Brief explanation of any issues found.`
       validatorCount: validResults.length,
       details: validResults,
     }
+  }
+
+  /**
+   * Generate voice profile recommendations for all agents
+   */
+  async generateVoiceProfilesForAgents(): Promise<Array<{
+    agentId: string
+    agentName: string
+    recommendation: {
+      name: string
+      description: string
+      gender: 'male' | 'female' | 'neutral'
+      age: 'child' | 'young' | 'adult' | 'elderly'
+      accent?: string
+      tone: string
+      reasoning: string
+    }
+  }>> {
+    const { voiceProfileGeneratorService } = await import('./voice-profile-generator.service')
+    const voiceProfiles: Array<any> = []
+
+    // Generate voice profile recommendations for each agent
+    const agents = Array.from(this.agents.values())
+    const recommendations = await Promise.allSettled(
+      agents.map(async (agent) => {
+        // Convert agent to NPC characteristics format
+        const npcCharacteristics = {
+          name: agent.name,
+          personality: agent.persona?.personality || agent.role,
+          backstory: agent.persona?.background,
+          behavior: agent.role,
+        }
+
+        const recommendation = await voiceProfileGeneratorService.generateVoiceProfileRecommendation(
+          npcCharacteristics,
+          this.config.model || 'gpt-4o-mini'
+        )
+
+        return {
+          agentId: agent.id,
+          agentName: agent.name,
+          recommendation,
+        }
+      })
+    )
+
+    // Collect successful recommendations
+    for (const result of recommendations) {
+      if (result.status === 'fulfilled') {
+        voiceProfiles.push(result.value)
+      }
+    }
+
+    return voiceProfiles
   }
 
   /**

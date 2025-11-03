@@ -459,6 +459,105 @@ const npcRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   // =====================================================
+  // GENERATE VOICE PROFILE FOR NPC
+  // =====================================================
+  fastify.post('/:id/generate-voice-profile', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Generate voice profile for NPC based on characteristics',
+      tags: ['npcs'],
+      params: z.object({
+        id: z.string().uuid()
+      }),
+      body: z.object({
+        model: z.string().default('gpt-4o-mini').optional(),
+        autoAssign: z.boolean().default(true).optional(),
+      }),
+      response: {
+        201: z.object({
+          voiceProfile: z.object({
+            id: z.string().uuid(),
+            name: z.string(),
+            description: z.string().nullable(),
+            gender: z.string().nullable(),
+            age: z.string().nullable(),
+            accent: z.string().nullable(),
+            tone: z.string().nullable(),
+            reasoning: z.string().optional(),
+          }),
+          assigned: z.boolean(),
+        })
+      }
+    }
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { model, autoAssign } = request.body as {
+      model?: string
+      autoAssign?: boolean
+    }
+
+    const npc = await fastify.db.query.npcs.findFirst({
+      where: eq(npcs.id, id)
+    })
+
+    if (!npc) {
+      throw new NotFoundError('NPC not found')
+    }
+
+    await verifyProjectMembership(fastify, npc.projectId, request)
+
+    // Import voice profile generator service
+    const { voiceProfileGeneratorService } = await import('../services/voice-profile-generator.service')
+
+    // Create voice profile based on NPC characteristics
+    const profile = await voiceProfileGeneratorService.createVoiceProfileForNPC(
+      {
+        name: npc.name,
+        personality: npc.personality || '',
+        backstory: npc.backstory || undefined,
+        race: npc.race || undefined,
+        class: npc.class || undefined,
+        behavior: npc.behavior,
+        appearance: npc.appearance as any,
+      },
+      request.user!.id,
+      npc.projectId,
+      model || 'gpt-4o-mini'
+    )
+
+    // Auto-assign to NPC if requested
+    let assigned = false
+    if (autoAssign !== false) {
+      await fastify.db
+        .update(npcs)
+        .set({
+          voiceId: profile.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(npcs.id, id))
+
+      assigned = true
+    }
+
+    // Extract reasoning from metadata
+    const reasoning = (profile.serviceSettings as any)?.voiceGenerationReasoning
+
+    reply.code(201).send({
+      voiceProfile: {
+        id: profile.id,
+        name: profile.name,
+        description: profile.description,
+        gender: profile.gender,
+        age: profile.age,
+        accent: profile.accent,
+        tone: profile.tone,
+        reasoning,
+      },
+      assigned,
+    })
+  })
+
+  // =====================================================
   // GET NPCS BY LOCATION
   // =====================================================
   fastify.get('/location/:location', {
