@@ -9,7 +9,7 @@ import { Volume2, Play, Pause, Image as ImageIcon, FileQuestion } from 'lucide-r
 import { Button } from '../common'
 
 interface AssetPreviewProps {
-  type: 'model' | 'texture' | 'audio' | 'other'
+  type: 'model' | 'texture' | 'audio' | 'image'
   fileUrl: string
   name: string
   mimeType?: string
@@ -167,7 +167,7 @@ export function AssetPreview({ type, fileUrl, name, mimeType, className = '' }: 
 
   // Determine preview type
   const isModel = type === 'model' || mimeType?.includes('gltf') || mimeType?.includes('glb')
-  const isImage = type === 'texture' || mimeType?.startsWith('image/')
+  const isImage = type === 'texture' || type === 'image' || mimeType?.startsWith('image/')
   const isAudio = type === 'audio' || mimeType?.startsWith('audio/')
 
   return (
