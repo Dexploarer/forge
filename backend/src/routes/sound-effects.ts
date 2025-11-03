@@ -482,7 +482,14 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
 
       fastify.log.info({ sfxId: sfx.id, size: audioBuffer.length }, '[SFX] Sound effect generated successfully')
 
-      reply.code(201).send({ sfx: serializeAllTimestamps(sfx) })
+      reply.code(201).send({
+        sfx: {
+          id: sfx.id,
+          name: sfx.name,
+          status: sfx.status,
+          generationPrompt: sfx.generationPrompt,
+        }
+      })
     } catch (error) {
       fastify.log.error({ error, name: data.name }, '[SFX] Sound effect generation failed')
 
