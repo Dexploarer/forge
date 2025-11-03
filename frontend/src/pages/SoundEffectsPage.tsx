@@ -132,9 +132,13 @@ export default function SoundEffectsPage() {
           subcategory: '',
           duration: '',
         })
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        alert(`Failed to generate sound effect: ${errorData.details || errorData.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Failed to generate SFX:', error)
+      alert('Failed to generate sound effect. Please try again.')
     } finally {
       setIsGenerating(false)
     }

@@ -18,17 +18,17 @@ import { AISDKService } from './ai-sdk.service'
 export interface NPCCharacteristics {
   name: string
   personality: string
-  backstory?: string
-  race?: string
-  class?: string
-  age?: number
-  gender?: string
-  behavior?: string
+  backstory?: string | undefined
+  race?: string | undefined
+  class?: string | undefined
+  age?: number | undefined
+  gender?: string | undefined
+  behavior?: string | undefined
   appearance?: {
     height?: string
     build?: string
     features?: string[]
-  }
+  } | undefined
 }
 
 export interface VoiceProfileRecommendation {

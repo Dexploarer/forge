@@ -406,6 +406,11 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
             status: z.string(),
             generationPrompt: z.string().nullable(),
           })
+        }),
+        500: z.object({
+          error: z.string(),
+          details: z.string(),
+          name: z.string()
         })
       }
     }
@@ -481,24 +486,12 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
     } catch (error) {
       fastify.log.error({ error, name: data.name }, '[SFX] Sound effect generation failed')
 
-      // Create SFX in failed state
-      const [sfx] = await fastify.db.insert(soundEffects).values({
-        name: data.name,
-        ownerId: request.user!.id,
-        projectId: data.projectId,
-        category: data.category,
-        subcategory: data.subcategory,
-        generationType: 'ai',
-        generationPrompt: data.prompt,
-        generationService: 'elevenlabs',
-        generationParams: data,
-        status: 'failed',
-        triggers: [],
-        tags: [],
-        metadata: { error: (error as Error).message },
-      }).returning()
-
-      reply.code(201).send({ sfx: serializeAllTimestamps(sfx!) })
+      // Return error response instead of creating a failed record
+      return reply.code(500).send({
+        error: 'Sound effect generation failed',
+        details: (error as Error).message,
+        name: data.name
+      })
     }
   })
 
