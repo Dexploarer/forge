@@ -10,9 +10,10 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://forge-staging.up.railwa
  * Make an API request
  */
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
-  // Ensure endpoint starts with /
-  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-  const url = normalizedEndpoint.startsWith('http') ? normalizedEndpoint : `${API_URL}${normalizedEndpoint}`
+  // Check if it's a full URL first (before normalization)
+  const url = endpoint.startsWith('http')
+    ? endpoint
+    : `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
 
   return fetch(url, {
     ...options,
@@ -30,9 +31,10 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
 export function useApiFetch() {
   // Memoize the fetch function to prevent re-renders
   return useCallback(async (endpoint: string, options: RequestInit = {}) => {
-    // Ensure endpoint starts with /
-    const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-    const url = normalizedEndpoint.startsWith('http') ? normalizedEndpoint : `${API_URL}${normalizedEndpoint}`
+    // Check if it's a full URL first (before normalization)
+    const url = endpoint.startsWith('http')
+      ? endpoint
+      : `${API_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`
 
     return fetch(url, {
       ...options,
