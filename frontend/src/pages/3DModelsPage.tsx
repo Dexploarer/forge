@@ -18,6 +18,7 @@ import {
   Input,
   Select,
 } from '../components/common'
+import { AssetPreview } from '../components/assets/AssetPreview'
 import { useApiFetch } from '../utils/api'
 
 interface Asset {
@@ -390,18 +391,15 @@ export default function ThreeDModelsPage() {
 
               {/* Modal Content */}
               <div className="p-6 space-y-6">
-                {/* File Preview */}
+                {/* 3D Model Preview */}
                 {selectedAsset.fileUrl && (
-                  <div className="aspect-video bg-slate-950 rounded-lg border border-slate-700 flex items-center justify-center overflow-hidden">
-                    {selectedAsset.thumbnailUrl ? (
-                      <img
-                        src={selectedAsset.thumbnailUrl}
-                        alt={selectedAsset.name}
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <Database size={64} className="text-blue-400" />
-                    )}
+                  <div className="rounded-lg overflow-hidden bg-slate-950 border border-slate-700" style={{ height: '500px' }}>
+                    <AssetPreview
+                      type={selectedAsset.type as 'model' | 'texture' | 'audio' | 'image'}
+                      fileUrl={selectedAsset.fileUrl}
+                      name={selectedAsset.name}
+                      mimeType={selectedAsset.metadata?.mimeType || undefined}
+                    />
                   </div>
                 )}
 

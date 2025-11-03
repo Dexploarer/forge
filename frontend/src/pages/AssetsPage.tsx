@@ -3,7 +3,7 @@
  * Browse and manage 3D models, textures, audio files, and other game assets
  */
 
-import { Database, Grid, List, Upload, Search, Download, ExternalLink } from 'lucide-react'
+import { Database, Grid, List, Upload, Search, Download, ExternalLink, Edit2, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -48,6 +48,9 @@ export default function AssetsPage() {
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedName, setEditedName] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     fetchAssets()
@@ -84,7 +87,65 @@ export default function AssetsPage() {
 
   const handleAssetClick = (asset: Asset) => {
     setSelectedAsset(asset)
+    setEditedName(asset.name)
+    setIsEditing(false)
     setShowDetailModal(true)
+  }
+
+  const handleEditName = async () => {
+    if (!selectedAsset || !editedName.trim()) return
+
+    try {
+      const response = await apiFetch(`/api/public-assets/${selectedAsset.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editedName.trim() }),
+      })
+
+      if (response.ok) {
+        const { asset: updatedAsset } = await response.json()
+        setAssets(assets.map(a => a.id === updatedAsset.id ? { ...a, name: updatedAsset.name } : a))
+        setSelectedAsset({ ...selectedAsset, name: updatedAsset.name })
+        setIsEditing(false)
+        console.log('Asset name updated successfully')
+      } else {
+        const error = await response.json()
+        alert(error.message || 'Failed to update asset name')
+      }
+    } catch (error) {
+      console.error('Failed to update asset name:', error)
+      alert('Failed to update asset name')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedAsset) return
+
+    if (!confirm(`Are you sure you want to delete "${selectedAsset.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      const response = await apiFetch(`/api/public-assets/${selectedAsset.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setAssets(assets.filter(a => a.id !== selectedAsset.id))
+        setShowDetailModal(false)
+        setSelectedAsset(null)
+        console.log('Asset deleted successfully')
+      } else {
+        const error = await response.json()
+        alert(error.message || 'Failed to delete asset')
+      }
+    } catch (error) {
+      console.error('Failed to delete asset:', error)
+      alert('Failed to delete asset')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const filteredAssets = assets.filter((asset) => {
@@ -244,6 +305,54 @@ export default function AssetsPage() {
             ],
             overview: (
               <div className="space-y-6">
+                {/* Edit/Delete Controls */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-700">
+                  {isEditing ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Input
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        className="text-lg font-bold flex-1"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleEditName()
+                          if (e.key === 'Escape') setIsEditing(false)
+                        }}
+                      />
+                      <Button variant="primary" size="sm" onClick={handleEditName}>
+                        Save
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-white">{selectedAsset.name}</h2>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setIsEditing(true)}
+                          className="gap-2"
+                        >
+                          <Edit2 size={14} />
+                        </Button>
+                      </div>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={handleDelete}
+                        disabled={isDeleting}
+                        className="gap-2"
+                      >
+                        <Trash2 size={16} />
+                        {isDeleting ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </>
+                  )}
+                </div>
+
                 {/* Asset Preview */}
                 {selectedAsset.fileUrl && (
                   <div>
