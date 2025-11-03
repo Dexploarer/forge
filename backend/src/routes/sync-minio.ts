@@ -38,6 +38,17 @@ export const syncMinioRoute: FastifyPluginAsync = async (server) => {
     try {
       console.log('📝 Starting MinIO sync...')
 
+      // Get the first user to use as owner
+      const { users } = await import('@/database/schema')
+      const firstUser = await db.select().from(users).limit(1)
+      if (firstUser.length === 0) {
+        return reply.status(400).send({
+          success: false,
+          error: 'No users found in database. Please create a user first.',
+        })
+      }
+      const ownerId = firstUser[0].id
+
       // Insert 3D models/textures
       const modelRecords = sample3DModels.map(filename => {
         const url = `https://${publicHost}/3d-models/${filename}`
@@ -45,6 +56,7 @@ export const syncMinioRoute: FastifyPluginAsync = async (server) => {
         const type = filename.endsWith('.png') ? 'texture' as const : 'model' as const
 
         return {
+          ownerId,
           name,
           type,
           fileUrl: url,
@@ -58,6 +70,7 @@ export const syncMinioRoute: FastifyPluginAsync = async (server) => {
 
       // Insert images
       const imageRecords = sampleImages.map(filename => ({
+        ownerId,
         name: filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
         type: 'texture' as const,
         fileUrl: `https://${publicHost}/images/${filename}`,
