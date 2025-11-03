@@ -3,7 +3,7 @@
  * Manage voice profiles and generate character voices with ElevenLabs
  */
 
-import { Mic, Search, Grid, List, Play, TestTube2, Plus, Trash2 } from 'lucide-react'
+import { Mic, Search, Grid, List, Play, TestTube2, Plus, Trash2, Sparkles } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -88,6 +88,7 @@ export default function VoicePage() {
 
   // Test voice
   const [testingProfileId, setTestingProfileId] = useState<string | null>(null)
+  const [isGeneratingSample, setIsGeneratingSample] = useState(false)
 
   // Detail modals
   const [selectedProfile, setSelectedProfile] = useState<VoiceProfile | null>(null)
@@ -183,6 +184,83 @@ export default function VoicePage() {
       console.error('Failed to test voice profile:', error)
     } finally {
       setTestingProfileId(null)
+    }
+  }
+
+  const handleGenerateSample = async () => {
+    if (!selectedProfile) return
+
+    setIsGeneratingSample(true)
+    try {
+      // Generate a test sample
+      const testResponse = await apiFetch(`/api/voice/profiles/${selectedProfile.id}/test`, {
+        method: 'POST',
+        body: JSON.stringify({
+          text: 'Hello, this is a sample of the voice profile.',
+        }),
+      })
+
+      if (!testResponse.ok) {
+        throw new Error('Failed to generate sample')
+      }
+
+      const testData = await testResponse.json()
+      const generationId = testData.generation?.id
+
+      if (!generationId) {
+        throw new Error('Failed to get generation ID')
+      }
+
+      // Poll for completion (check every 2 seconds, max 30 seconds)
+      let attempts = 0
+      const maxAttempts = 15
+
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+
+        const checkResponse = await apiFetch(`/api/voice/generations/${generationId}`)
+        if (checkResponse.ok) {
+          const generationData = await checkResponse.json()
+          const generation = generationData.generation
+
+          if (generation.status === 'completed' && generation.audioUrl) {
+            // Update the profile with the sample audio URL
+            const updateResponse = await apiFetch(`/api/voice/profiles/${selectedProfile.id}`, {
+              method: 'PATCH',
+              body: JSON.stringify({
+                sampleAudioUrl: generation.audioUrl,
+              }),
+            })
+
+            if (updateResponse.ok) {
+              // Refresh profiles and update selected profile
+              const response = await apiFetch('/api/voice/profiles')
+              if (response.ok) {
+                const data = await response.json()
+                const updatedProfiles = data.profiles || []
+                setProfiles(updatedProfiles)
+                // Update selected profile
+                const updatedProfile = updatedProfiles.find((p: VoiceProfile) => p.id === selectedProfile.id)
+                if (updatedProfile) {
+                  setSelectedProfile(updatedProfile)
+                }
+              }
+              return
+            }
+          } else if (generation.status === 'failed') {
+            throw new Error(generation.error || 'Generation failed')
+          }
+        }
+
+        attempts++
+      }
+
+      throw new Error('Sample generation timed out')
+    } catch (error) {
+      console.error('Failed to generate sample audio:', error)
+      alert(`Failed to generate sample audio: ${(error as Error).message}`)
+    } finally {
+      setIsGeneratingSample(false)
     }
   }
 
@@ -807,12 +885,30 @@ export default function VoicePage() {
                     )}
                   </div>
                 </div>
-                {selectedProfile.sampleAudioUrl && (
+                {selectedProfile.sampleAudioUrl ? (
                   <div>
                     <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
                       Sample Audio
                     </h3>
                     <AudioPlayer url={selectedProfile.sampleAudioUrl} />
+                  </div>
+                ) : (
+                  <div>
+                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+                      Sample Audio
+                    </h3>
+                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700 text-center">
+                      <p className="text-gray-400 text-sm mb-3">No sample audio available</p>
+                      <Button
+                        variant="primary"
+                        onClick={handleGenerateSample}
+                        disabled={isGeneratingSample}
+                        className="gap-2"
+                      >
+                        <Sparkles size={16} />
+                        {isGeneratingSample ? 'Generating Sample...' : 'Generate Sample Audio'}
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <div className="flex gap-2">

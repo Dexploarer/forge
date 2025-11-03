@@ -3,7 +3,7 @@
  * Create and manage non-player characters
  */
 
-import { Users, Plus, Search, Grid, List, Star, Sparkles } from 'lucide-react'
+import { Users, Plus, Search, Grid, List, Star, Sparkles, Mic } from 'lucide-react'
 import { useState, useEffect, type ReactNode } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -17,7 +17,7 @@ import {
   ModalBody,
   ModalFooter,
 } from '../components/common'
-import { CharacterCard, DetailModal } from '../components/common'
+import { CharacterCard, DetailModal, AudioPlayer } from '../components/common'
 import { useApiFetch } from '../utils/api'
 
 interface NPC {
@@ -60,10 +60,45 @@ export default function NPCsPage() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState(false)
+  const [voiceProfile, setVoiceProfile] = useState<{
+    id: string
+    name: string
+    description: string | null
+    gender: string | null
+    age: string | null
+    accent: string | null
+    tone: string | null
+    sampleAudioUrl: string | null
+  } | null>(null)
 
   useEffect(() => {
     fetchNpcs()
   }, [])
+
+  useEffect(() => {
+    // Fetch voice profile when NPC with voiceId is selected
+    if (selectedNpc?.voiceId) {
+      fetchVoiceProfile(selectedNpc.voiceId)
+    } else {
+      setVoiceProfile(null)
+    }
+  }, [selectedNpc?.voiceId])
+
+  const fetchVoiceProfile = async (voiceId: string) => {
+    try {
+      const response = await apiFetch(`/api/voice/profiles/${voiceId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setVoiceProfile(data.profile)
+      } else {
+        setVoiceProfile(null)
+      }
+    } catch (error) {
+      console.error('Failed to fetch voice profile:', error)
+      setVoiceProfile(null)
+    }
+  }
 
   const fetchNpcs = async () => {
     try {
@@ -309,6 +344,63 @@ export default function NPCsPage() {
     }
   }
 
+  const handleGenerateVoice = async () => {
+    if (!selectedNpc) return
+
+    setIsGeneratingVoice(true)
+    try {
+      console.log('[NPCsPage] handleGenerateVoice: Generating voice profile', {
+        npcId: selectedNpc.id,
+        npcName: selectedNpc.name,
+      })
+
+      // Call voice profile generation endpoint
+      const response = await apiFetch(`/api/npcs/${selectedNpc.id}/generate-voice-profile`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          autoAssign: true, // Automatically assign the generated voice to the NPC
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('[NPCsPage] handleGenerateVoice: Failed', error)
+        alert(`Failed to generate voice profile: ${error}`)
+        return
+      }
+
+      const data = await response.json()
+      console.log('[NPCsPage] handleGenerateVoice: Voice profile generated', {
+        voiceProfileId: data.voiceProfile?.id,
+        assigned: data.assigned,
+      })
+
+      // Refresh the NPC list to get updated voiceId
+      await fetchNpcs()
+      
+      // Update the selected NPC
+      const updatedResponse = await apiFetch(`/api/npcs/${selectedNpc.id}`)
+      if (updatedResponse.ok) {
+        const updatedData = await updatedResponse.json()
+        if (updatedData.npc) {
+          setSelectedNpc(updatedData.npc)
+          // Fetch voice profile after assignment
+          if (updatedData.npc.voiceId) {
+            await fetchVoiceProfile(updatedData.npc.voiceId)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[NPCsPage] handleGenerateVoice: Error', error)
+      alert('Failed to generate voice profile. Please try again.')
+    } finally {
+      setIsGeneratingVoice(false)
+    }
+  }
+
   const getNpcBadges = (npc: NPC): Array<'featured' | 'template' | 'published' | 'draft'> => {
     const badges: Array<'featured' | 'template' | 'published' | 'draft'> = []
     if (npc.isFeatured) badges.push('featured')
@@ -341,12 +433,79 @@ export default function NPCsPage() {
         )}
 
         {/* Voice */}
-        {npc.voiceId && (
+        {npc.voiceId ? (
           <div>
             <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
               Voice Settings
             </h3>
-            <p className="text-gray-300">Voice ID: <span className="text-blue-400 font-mono">{npc.voiceId}</span></p>
+            {voiceProfile ? (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-gray-300 mb-2">
+                    Voice Profile: <span className="text-blue-400 font-mono">{voiceProfile.name}</span>
+                  </p>
+                  {voiceProfile.description && (
+                    <p className="text-gray-400 text-sm mb-3">{voiceProfile.description}</p>
+                  )}
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    {voiceProfile.gender && (
+                      <div>
+                        <span className="text-xs text-gray-500">Gender</span>
+                        <p className="text-white capitalize">{voiceProfile.gender}</p>
+                      </div>
+                    )}
+                    {voiceProfile.age && (
+                      <div>
+                        <span className="text-xs text-gray-500">Age</span>
+                        <p className="text-white capitalize">{voiceProfile.age}</p>
+                      </div>
+                    )}
+                    {voiceProfile.accent && (
+                      <div>
+                        <span className="text-xs text-gray-500">Accent</span>
+                        <p className="text-white">{voiceProfile.accent}</p>
+                      </div>
+                    )}
+                    {voiceProfile.tone && (
+                      <div>
+                        <span className="text-xs text-gray-500">Tone</span>
+                        <p className="text-white">{voiceProfile.tone}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {voiceProfile.sampleAudioUrl && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      Sample Audio
+                    </h4>
+                    <AudioPlayer url={voiceProfile.sampleAudioUrl} title={voiceProfile.name} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-gray-300">
+                Voice ID: <span className="text-blue-400 font-mono">{npc.voiceId}</span>
+              </p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-3">
+              Voice Settings
+            </h3>
+            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700 text-center">
+              <p className="text-gray-400 text-sm mb-3">No voice profile assigned</p>
+              <Button
+                variant="primary"
+                onClick={handleGenerateVoice}
+                disabled={isGeneratingVoice}
+                className="gap-2"
+              >
+                <Mic size={16} />
+                {isGeneratingVoice ? 'Generating Voice...' : 'Generate Voice Profile'}
+              </Button>
+            </div>
           </div>
         )}
 
