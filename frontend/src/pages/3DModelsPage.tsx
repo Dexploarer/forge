@@ -3,7 +3,7 @@
  * Browse and manage 3D model assets
  */
 
-import { Database, Grid, List, Upload, Search } from 'lucide-react'
+import { Database, Grid, List, Upload, Search, Edit2, Trash2, X, ExternalLink } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -25,6 +25,7 @@ interface Asset {
   name: string
   type: string
   status: 'draft' | 'published'
+  visibility?: 'public' | 'private'
   thumbnailUrl: string | null
   fileUrl: string | null
   metadata: Record<string, any>
@@ -39,6 +40,10 @@ export default function ThreeDModelsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedName, setEditedName] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     fetchAssets()
@@ -88,6 +93,72 @@ export default function ThreeDModelsPage() {
     const matchesStatus = selectedStatus === 'all' || asset.status === selectedStatus
     return matchesSearch && matchesStatus
   })
+
+  const handleViewAsset = (asset: Asset) => {
+    setSelectedAsset(asset)
+    setEditedName(asset.name)
+    setIsEditing(false)
+  }
+
+  const handleEditName = async () => {
+    if (!selectedAsset || !editedName.trim()) return
+
+    try {
+      const response = await apiFetch(`/api/assets/${selectedAsset.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editedName.trim() }),
+      })
+
+      if (response.ok) {
+        const { asset: updatedAsset } = await response.json()
+        setAssets(assets.map(a => a.id === updatedAsset.id ? { ...a, name: updatedAsset.name } : a))
+        setSelectedAsset({ ...selectedAsset, name: updatedAsset.name })
+        setIsEditing(false)
+        console.log('Model name updated successfully')
+      } else {
+        const error = await response.json()
+        alert(error.message || 'Failed to update model name')
+      }
+    } catch (error) {
+      console.error('Failed to update model name:', error)
+      alert('Failed to update model name')
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!selectedAsset) return
+
+    if (!confirm(`Are you sure you want to delete "${selectedAsset.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setIsDeleting(true)
+      const response = await apiFetch(`/api/assets/${selectedAsset.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setAssets(assets.filter(a => a.id !== selectedAsset.id))
+        setSelectedAsset(null)
+        console.log('Model deleted successfully')
+      } else {
+        const error = await response.json()
+        alert(error.message || 'Failed to delete model')
+      }
+    } catch (error) {
+      console.error('Failed to delete model:', error)
+      alert('Failed to delete model')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const closeModal = () => {
+    setSelectedAsset(null)
+    setIsEditing(false)
+  }
 
   return (
     <DashboardLayout>
@@ -228,7 +299,7 @@ export default function ThreeDModelsPage() {
                     </CardHeader>
                     <CardFooter className="flex items-center justify-between text-xs">
                       <span className="text-gray-500">{formatDate(asset.createdAt)}</span>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" onClick={() => handleViewAsset(asset)}>
                         View
                       </Button>
                     </CardFooter>
@@ -260,7 +331,7 @@ export default function ThreeDModelsPage() {
                         {asset.status}
                       </Badge>
                       <span className="text-sm text-gray-500">{formatDate(asset.createdAt)}</span>
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" onClick={() => handleViewAsset(asset)}>
                         View
                       </Button>
                     </CardContent>
@@ -268,6 +339,146 @@ export default function ThreeDModelsPage() {
                 )}
               </Card>
             ))}
+          </div>
+        )}
+
+        {/* Asset Details Modal */}
+        {selectedAsset && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+                <div className="flex items-center gap-3">
+                  <Database size={24} className="text-blue-400" />
+                  {isEditing ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={editedName}
+                        onChange={(e) => setEditedName(e.target.value)}
+                        className="text-xl font-bold"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleEditName()
+                          if (e.key === 'Escape') setIsEditing(false)
+                        }}
+                      />
+                      <Button variant="primary" size="sm" onClick={handleEditName}>
+                        Save
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-bold text-white">{selectedAsset.name}</h2>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEditing(true)}
+                        className="gap-2"
+                      >
+                        <Edit2 size={14} />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" onClick={closeModal}>
+                  <X size={20} />
+                </Button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 space-y-6">
+                {/* File Preview */}
+                {selectedAsset.fileUrl && (
+                  <div className="aspect-video bg-slate-950 rounded-lg border border-slate-700 flex items-center justify-center overflow-hidden">
+                    {selectedAsset.thumbnailUrl ? (
+                      <img
+                        src={selectedAsset.thumbnailUrl}
+                        alt={selectedAsset.name}
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <Database size={64} className="text-blue-400" />
+                    )}
+                  </div>
+                )}
+
+                {/* Asset Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-400">Status</p>
+                    <Badge variant={selectedAsset.status === 'published' ? 'success' : 'secondary'}>
+                      {selectedAsset.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Type</p>
+                    <p className="text-white font-medium">{selectedAsset.type}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Created</p>
+                    <p className="text-white">{formatDate(selectedAsset.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-400">Updated</p>
+                    <p className="text-white">{formatDate(selectedAsset.updatedAt)}</p>
+                  </div>
+                </div>
+
+                {/* Metadata */}
+                {selectedAsset.metadata && Object.keys(selectedAsset.metadata).length > 0 && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-2">Metadata</p>
+                    <div className="bg-slate-950 rounded-lg p-4 border border-slate-700">
+                      <pre className="text-xs text-gray-300 overflow-x-auto">
+                        {JSON.stringify(selectedAsset.metadata, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+
+                {/* File URL */}
+                {selectedAsset.fileUrl && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-2">File URL</p>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={selectedAsset.fileUrl}
+                        readOnly
+                        className="flex-1 text-sm"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.open(selectedAsset.fileUrl!, '_blank')}
+                        className="gap-2"
+                      >
+                        <ExternalLink size={16} />
+                        Open
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-between p-6 border-t border-slate-700">
+                <Button
+                  variant="danger"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="gap-2"
+                >
+                  <Trash2 size={16} />
+                  {isDeleting ? 'Deleting...' : 'Delete Model'}
+                </Button>
+                <Button variant="ghost" onClick={closeModal}>
+                  Close
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>
