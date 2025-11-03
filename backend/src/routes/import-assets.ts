@@ -1,16 +1,13 @@
 import { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { exec } from 'child_process'
-import { promisify } from 'util'
-
-const execAsync = promisify(exec)
 
 const importAssetsRoutes: FastifyPluginAsync = async (fastify) => {
   // Trigger asset import
   fastify.post('/trigger', {
-    preHandler: [fastify.requireApiKey],
+    preHandler: [fastify.authenticate],
     schema: {
-      description: 'Trigger Hyperscape assets import (requires API key)',
+      description: 'Trigger Hyperscape assets import (requires authentication)',
       tags: ['import'],
       querystring: z.object({
         dryRun: z.enum(['true', 'false']).optional(),
@@ -49,7 +46,7 @@ const importAssetsRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Get import status (placeholder - could be enhanced with actual tracking)
   fastify.get('/status', {
-    preHandler: [fastify.requireApiKey],
+    preHandler: [fastify.authenticate],
     schema: {
       description: 'Get asset import status',
       tags: ['import'],
@@ -59,7 +56,7 @@ const importAssetsRoutes: FastifyPluginAsync = async (fastify) => {
         })
       }
     }
-  }, async (request, reply) => {
+  }, async () => {
     return {
       message: 'Check Railway logs for import status',
     }
