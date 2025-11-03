@@ -83,6 +83,7 @@ export const syncMinioRoute: FastifyPluginAsync = async (server) => {
 
       // Insert audio
       const audioRecords = sampleAudioFiles.map(filename => ({
+        ownerId,
         name: filename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
         audioUrl: `https://${publicHost}/audio/${filename}`,
         status: 'published' as const,
