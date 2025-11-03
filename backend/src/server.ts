@@ -55,6 +55,7 @@ import weaponDetectionRoutes from './routes/weapon-detection'
 import bootstrapRoutes from './routes/bootstrap'
 import frontendErrorRoutes from './routes/frontend-errors'
 import importAssetsRoutes from './routes/import-assets'
+import { syncMinioRoute } from './routes/sync-minio'
 
 // Utils
 import { AppError } from './utils/errors'
@@ -159,6 +160,9 @@ export async function buildServer() {
 
   // Asset Import (admin/system)
   await server.register(importAssetsRoutes, { prefix: '/api/import' })
+
+  // MinIO Sync
+  await server.register(syncMinioRoute, { prefix: '/api' })
 
   // Global error handler
   server.setErrorHandler(async (error, request, reply) => {
