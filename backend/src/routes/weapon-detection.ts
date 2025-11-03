@@ -215,9 +215,10 @@ function parseOrientationData(content: string | null | undefined, logger: any): 
 
 export default async function (server: FastifyInstance) {
   // We need a raw OpenAI client for JSON mode
-  const rawOpenAI = new OpenAI({
+  // Only initialize if API key is available
+  const rawOpenAI = env.OPENAI_API_KEY ? new OpenAI({
     apiKey: env.OPENAI_API_KEY
-  })
+  }) : null
 
   /**
    * POST /api/weapon-handle-detect

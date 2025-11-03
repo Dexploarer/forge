@@ -80,6 +80,7 @@ export async function buildServer() {
     connectionTimeout: 60000,
     keepAliveTimeout: 65000,
     bodyLimit: 10 * 1024 * 1024, // 10MB
+    pluginTimeout: 60000, // 60 seconds for plugin registration (database can be slow in tests)
   }).withTypeProvider<ZodTypeProvider>()
 
   // Set Zod validation
