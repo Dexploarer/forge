@@ -43,11 +43,106 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // Authentication preHandler hook - NO AUTH MODE (password-protected frontend)
-  // Since the frontend is password-protected, everyone who reaches the backend is admin
+  // Authentication preHandler hook
   fastify.decorate('authenticate', async function(request, _reply) {
     try {
-      // Create or find a dummy admin user for password-protected access
+      // TEST MODE: Use mock tokens for testing
+      if (env.NODE_ENV === 'test') {
+        const authHeader = request.headers.authorization
+        if (!authHeader) {
+          throw new UnauthorizedError('Missing authorization header')
+        }
+
+        // Parse mock token format: 'Bearer mock-{privyUserId}-token'
+        const token = authHeader.replace('Bearer ', '')
+        if (!token.startsWith('mock-')) {
+          throw new UnauthorizedError('Invalid test token format')
+        }
+
+        // Extract identifier from token
+        // Token patterns:
+        // 1. mock-systemadmin-token → system-test-admin
+        // 2. mock-admin-token → {any}-test-admin
+        // 3. mock-teamowner-token → teams-test-owner
+        const identifier = token.replace('mock-', '').replace('-token', '')
+
+        // Try to find the user by matching identifier pattern
+        const allUsers = await db.query.users.findMany()
+
+        // Try multiple matching strategies
+        const user = allUsers.find(u => {
+          if (!u.privyUserId.includes('-test-')) return false
+
+          // Strategy 1: Full match (mock-systemadmin-token → system-test-admin)
+          const parts = u.privyUserId.split('-test-')
+          if (parts.length === 2) {
+            const category = parts[0].replace(/-/g, '')
+            const role = parts[1].replace(/-/g, '')
+            const combined = `${category}${role}`
+            if (identifier === combined) return true
+          }
+
+          // Strategy 2: Simple role match (mock-admin-token → *-test-admin)
+          const roleOnly = u.privyUserId.split('-test-')[1]?.replace(/-/g, '')
+          if (roleOnly && identifier === roleOnly) return true
+
+          // Strategy 3: Role-based match (mock-teamowner-token → teams-test-owner)
+          // Check if identifier ends with the role and category is similar
+          if (parts.length === 2) {
+            const category = parts[0]
+            const role = parts[1].replace(/-/g, '')
+
+            // Check if identifier ends with the role
+            if (identifier.endsWith(role)) {
+              const categoryFromIdentifier = identifier.replace(role, '')
+              const categoryNormalized = category.replace(/-/g, '')
+
+              // Check if categories are similar (allow plural/singular differences)
+              if (categoryFromIdentifier === categoryNormalized) return true
+              if (categoryFromIdentifier + 's' === categoryNormalized) return true
+              if (categoryFromIdentifier === categoryNormalized + 's') return true
+              if (categoryNormalized.startsWith(categoryFromIdentifier)) return true
+              if (categoryFromIdentifier.startsWith(categoryNormalized)) return true
+            }
+          }
+
+          // Strategy 4: Flexible substring match
+          const normalized = u.privyUserId.replace('-test-', '').replace(/-/g, '')
+          const identifierNorm = identifier.replace(/-/g, '')
+
+          if (normalized.includes(identifierNorm) || identifierNorm.includes(normalized)) return true
+          if (normalized.endsWith(identifierNorm)) return true
+
+          return false
+        })
+
+        if (!user) {
+          fastify.log.error({
+            token,
+            identifier,
+            availableUsers: allUsers.map(u => u.privyUserId)
+          }, 'No test user found for token')
+          throw new UnauthorizedError(`No test user found for token: ${token}`)
+        }
+
+        const isAdmin = user.role === 'admin'
+
+        request.user = {
+          ...user,
+          isAdmin
+        }
+
+        fastify.log.debug({
+          userId: user.id,
+          role: user.role,
+          isAdmin
+        }, 'Test authentication successful')
+
+        return
+      }
+
+      // PRODUCTION MODE: NO AUTH (password-protected frontend)
+      // Since the frontend is password-protected, everyone who reaches the backend is admin
       const dummyPrivyId = 'password-gate-admin'
 
       let user = await db.query.users.findFirst({
@@ -96,10 +191,88 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // Optional authentication - same as authenticate in password-gate mode
+  // Optional authentication
   fastify.decorate('optionalAuth', async function(request, _reply) {
     try {
-      // In password-gate mode, treat optional auth the same as required auth
+      // TEST MODE: Use mock tokens for testing
+      if (env.NODE_ENV === 'test') {
+        const authHeader = request.headers.authorization
+        if (!authHeader) {
+          // Optional auth - no error if missing
+          return
+        }
+
+        const token = authHeader.replace('Bearer ', '')
+        if (!token.startsWith('mock-')) {
+          // Invalid format but optional - just skip
+          return
+        }
+
+        const identifier = token.replace('mock-', '').replace('-token', '')
+
+        // Try to find the user by matching identifier pattern
+        const allUsers = await db.query.users.findMany()
+        const user = allUsers.find(u => {
+          if (!u.privyUserId.includes('-test-')) return false
+
+          // Strategy 1: Full match (mock-systemadmin-token → system-test-admin)
+          const parts = u.privyUserId.split('-test-')
+          if (parts.length === 2) {
+            const category = parts[0].replace(/-/g, '')
+            const role = parts[1].replace(/-/g, '')
+            const combined = `${category}${role}`
+            if (identifier === combined) return true
+          }
+
+          // Strategy 2: Simple role match (mock-admin-token → *-test-admin)
+          const roleOnly = u.privyUserId.split('-test-')[1]?.replace(/-/g, '')
+          if (roleOnly && identifier === roleOnly) return true
+
+          // Strategy 3: Role-based match (mock-teamowner-token → teams-test-owner)
+          if (parts.length === 2) {
+            const category = parts[0]
+            const role = parts[1].replace(/-/g, '')
+
+            if (identifier.endsWith(role)) {
+              const categoryFromIdentifier = identifier.replace(role, '')
+              const categoryNormalized = category.replace(/-/g, '')
+
+              if (categoryFromIdentifier === categoryNormalized) return true
+              if (categoryFromIdentifier + 's' === categoryNormalized) return true
+              if (categoryFromIdentifier === categoryNormalized + 's') return true
+              if (categoryNormalized.startsWith(categoryFromIdentifier)) return true
+              if (categoryFromIdentifier.startsWith(categoryNormalized)) return true
+            }
+          }
+
+          // Strategy 4: Flexible substring match
+          const normalized = u.privyUserId.replace('-test-', '').replace(/-/g, '')
+          const identifierNorm = identifier.replace(/-/g, '')
+
+          if (normalized.includes(identifierNorm) || identifierNorm.includes(normalized)) return true
+          if (normalized.endsWith(identifierNorm)) return true
+
+          return false
+        })
+
+        if (user) {
+          const isAdmin = user.role === 'admin'
+          request.user = {
+            ...user,
+            isAdmin
+          }
+
+          fastify.log.debug({
+            userId: user.id,
+            role: user.role,
+            isAdmin
+          }, 'Optional test authentication successful')
+        }
+
+        return
+      }
+
+      // PRODUCTION MODE: In password-gate mode, treat optional auth the same as required auth
       const dummyPrivyId = 'password-gate-admin'
 
       let user = await db.query.users.findFirst({
