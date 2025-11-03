@@ -22,7 +22,7 @@ interface Asset {
   id: string
   name: string
   description?: string
-  type: 'model' | 'texture' | 'audio' | 'other'
+  type: 'model' | 'texture' | 'audio' | 'image'
   status: 'draft' | 'processing' | 'published' | 'failed'
   visibility: 'private' | 'public'
   thumbnailUrl: string | null
@@ -163,7 +163,7 @@ export default function AssetsPage() {
               <option value="model">3D Models</option>
               <option value="texture">Textures</option>
               <option value="audio">Audio</option>
-              <option value="other">Other</option>
+              <option value="image">Images</option>
             </Select>
             <Select
               value={selectedStatus}
