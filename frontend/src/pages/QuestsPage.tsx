@@ -469,6 +469,37 @@ export default function QuestsPage() {
     }
   }
 
+  const handleDeleteQuest = async () => {
+    if (!selectedQuest) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete quest "${selectedQuest.name}"? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await apiFetch(`/api/quests/${selectedQuest.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok || response.status === 204) {
+        // Remove from list
+        setQuests(quests.filter((quest) => quest.id !== selectedQuest.id))
+        // Close modal
+        setShowDetailModal(false)
+        setSelectedQuest(null)
+      } else {
+        const error = await response.text()
+        console.error('Failed to delete quest:', error)
+        alert(`Failed to delete quest: ${error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete quest:', error)
+      alert('Failed to delete quest. Please try again.')
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -742,6 +773,7 @@ export default function QuestsPage() {
             setShowDetailModal(false)
             setSelectedQuest(null)
           }}
+          onDelete={handleDeleteQuest}
           entity={{
             id: selectedQuest.id,
             name: selectedQuest.name,

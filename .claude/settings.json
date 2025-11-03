@@ -1,40 +1,78 @@
 {
-  "apiVersion": "1.0.0",
-  "name": "Forge - Game Asset Management Platform",
-  "description": "Production-ready game asset management and AI-powered content generation platform",
-  "version": "1.0.0",
-  "projects": {
-    "backend": {
-      "path": "./backend",
-      "stack": ["Bun", "Fastify", "TypeScript", "Drizzle ORM", "PostgreSQL", "Privy Auth"],
-      "skills": ["backend", "core"],
-      "primaryLanguages": ["TypeScript"],
-      "testFramework": "Bun Test"
-    },
-    "frontend": {
-      "path": "./frontend",
-      "stack": ["React 19", "TypeScript", "Vite", "Tailwind CSS", "Three.js", "Privy Auth", "Wagmi"],
-      "skills": ["frontend", "core"],
-      "primaryLanguages": ["TypeScript", "TSX"],
-      "testFramework": "Vitest"
-    }
-  },
   "hooks": {
-    "enabled": true,
-    "categories": ["security", "strict-typing", "development-safety", "knowledge-cutoff"]
-  },
-  "agents": {
-    "enabled": true,
-    "autoSuggest": true
-  },
-  "commands": {
-    "enabled": true,
-    "prefix": "/"
-  },
-  "preferences": {
-    "codeStyle": "strict-typescript",
-    "architecture": "class-based",
-    "testing": "comprehensive",
-    "security": "high"
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\n🎮 Forge Session Started! 🎮\n📅 '$(date '+%Y-%m-%d %H:%M:%S')'\n📂 '$(pwd)'\n💡 Skills: Frontend (React/Three.js) + Backend (Bun/Fastify) + Platform\n'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash.*git commit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if git diff --cached | grep -qE '(OPENAI_API_KEY|ANTHROPIC_API_KEY|PRIVY_APP_SECRET|DATABASE_URL|ENCRYPTION_KEY|QDRANT_API_KEY|ELEVENLABS_API_KEY|MESHY_API_KEY)'; then echo '🚨 ERROR: API key or secret detected in commit!' >&2; exit 2; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash.*git push.*-f",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '⚠️  WARNING: Force push detected! This is dangerous.' >&2; read -p 'Type YES to force push: ' confirm; if [ \"$confirm\" != \"YES\" ]; then exit 2; fi",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash.*(bun add|npm install|yarn add)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '📦 Installing package... Checking for known vulnerabilities...'",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Bash.*(rm -rf|DROP TABLE|DROP DATABASE)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '🔥 DESTRUCTIVE OPERATION DETECTED!' >&2; read -p 'Type DELETE to confirm: ' confirm; if [ \"$confirm\" != \"DELETE\" ]; then exit 2; fi",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Create",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f tsconfig.json ]; then bunx tsc --noEmit --skipLibCheck 2>&1 | head -5 || true; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\n👋 Forge Session Ended\n⏱️  '$(date '+%H:%M:%S')'\n'"
+          }
+        ]
+      }
+    ]
   }
 }

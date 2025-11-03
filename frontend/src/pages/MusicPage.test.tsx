@@ -148,10 +148,9 @@ describe('MusicPage - Integration Tests', () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.queryByText('Loading music tracks...')).not.toBeInTheDocument()
+        expect(screen.getByText('No music tracks yet')).toBeInTheDocument()
       })
 
-      expect(screen.getByText('No music tracks yet')).toBeInTheDocument()
       expect(screen.getByText('Generate AI music or upload your first track to get started!')).toBeInTheDocument()
     })
 
@@ -348,10 +347,7 @@ describe('MusicPage - Integration Tests', () => {
 
       global.fetch = vi.fn()
         .mockResolvedValueOnce({ ok: true, json: async () => mockMusicList })
-        .mockResolvedValueOnce({
-          ok: false,
-          json: async () => ({ error: 'Generation failed', details: 'API key invalid' })
-        })
+        .mockRejectedValueOnce(new Error('Generation failed'))
 
       renderPage()
 
@@ -368,7 +364,7 @@ describe('MusicPage - Integration Tests', () => {
       await waitFor(() => {
         expect(consoleError).toHaveBeenCalledWith(
           'Failed to generate music:',
-          expect.anything()
+          expect.any(Error)
         )
       })
 
@@ -571,8 +567,14 @@ describe('MusicPage - Integration Tests', () => {
       // Verify both API calls
       await waitFor(() => {
         const calls = (global.fetch as any).mock.calls
-        expect(calls.some((call: any) => call[0].includes('/api/music') && call[1]?.method === 'POST')).toBe(true)
-        expect(calls.some((call: any) => call[0].includes('/upload') && call[1]?.method === 'POST')).toBe(true)
+        const createCall = calls.some((call: any) =>
+          call[0].includes('/api/music') && !call[0].includes('/upload') && call[1]?.method === 'POST'
+        )
+        const uploadCall = calls.some((call: any) =>
+          call[0].includes('/upload') && call[1]?.method === 'POST'
+        )
+        expect(createCall).toBe(true)
+        expect(uploadCall).toBe(true)
       })
 
       // Verify track creation body

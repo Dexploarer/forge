@@ -3,7 +3,7 @@
  * Manage voice profiles and generate character voices with ElevenLabs
  */
 
-import { Mic, Search, Grid, List, Play, TestTube2, Plus } from 'lucide-react'
+import { Mic, Search, Grid, List, Play, TestTube2, Plus, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { DashboardLayout } from '../components/dashboard/DashboardLayout'
 import {
@@ -211,6 +211,62 @@ export default function VoicePage() {
       console.error('Failed to generate voice:', error)
     } finally {
       setIsGenerating(false)
+    }
+  }
+
+  const handleDeleteProfile = async () => {
+    if (!selectedProfile) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete voice profile "${selectedProfile.name}"? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await apiFetch(`/api/voice/profiles/${selectedProfile.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok || response.status === 204) {
+        // Remove from list
+        setProfiles(profiles.filter((profile) => profile.id !== selectedProfile.id))
+        // Close modal
+        setSelectedProfile(null)
+      } else {
+        const error = await response.text()
+        console.error('Failed to delete voice profile:', error)
+        alert(`Failed to delete voice profile: ${error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete voice profile:', error)
+      alert('Failed to delete voice profile. Please try again.')
+    }
+  }
+
+  const handleDeleteGeneration = async (generationId: string) => {
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this voice generation? This action cannot be undone.'
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await apiFetch(`/api/voice/generations/${generationId}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok || response.status === 204) {
+        // Remove from list
+        setGenerations(generations.filter((gen) => gen.id !== generationId))
+      } else {
+        const error = await response.text()
+        console.error('Failed to delete voice generation:', error)
+        alert(`Failed to delete voice generation: ${error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete voice generation:', error)
+      alert('Failed to delete voice generation. Please try again.')
     }
   }
 
@@ -453,6 +509,15 @@ export default function VoicePage() {
                         <span className="text-xs text-gray-500 ml-auto">
                           {formatDate(generation.createdAt)}
                         </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteGeneration(generation.id)}
+                          className="ml-2 hover:text-red-400"
+                          title="Delete generation"
+                        >
+                          <Trash2 size={14} />
+                        </Button>
                       </div>
                       <p className="text-white text-sm mb-3">{generation.text}</p>
                       {generation.audioUrl && generation.status === 'completed' && (
@@ -502,6 +567,7 @@ export default function VoicePage() {
                 <Select
                   value={newProfile.gender}
                   onChange={(e) => setNewProfile({ ...newProfile, gender: e.target.value })}
+                  aria-label="Gender"
                 >
                   <option value="">Select gender</option>
                   <option value="male">Male</option>
@@ -514,6 +580,7 @@ export default function VoicePage() {
                 <Select
                   value={newProfile.age}
                   onChange={(e) => setNewProfile({ ...newProfile, age: e.target.value })}
+                  aria-label="Age"
                 >
                   <option value="">Select age</option>
                   <option value="child">Child</option>
@@ -603,6 +670,7 @@ export default function VoicePage() {
               <Select
                 value={generateForm.voiceProfileId}
                 onChange={(e) => setGenerateForm({ ...generateForm, voiceProfileId: e.target.value })}
+                aria-label="Voice Profile"
               >
                 <option value="">Select voice profile</option>
                 {profiles.filter(p => p.isActive).map((profile) => (
@@ -628,6 +696,7 @@ export default function VoicePage() {
                 <Select
                   value={generateForm.context}
                   onChange={(e) => setGenerateForm({ ...generateForm, context: e.target.value })}
+                  aria-label="Context"
                 >
                   <option value="dialog">Dialog</option>
                   <option value="narration">Narration</option>
@@ -639,6 +708,7 @@ export default function VoicePage() {
                 <Select
                   value={generateForm.emotion}
                   onChange={(e) => setGenerateForm({ ...generateForm, emotion: e.target.value })}
+                  aria-label="Emotion"
                 >
                   <option value="neutral">Neutral</option>
                   <option value="happy">Happy</option>
@@ -680,6 +750,7 @@ export default function VoicePage() {
         <DetailModal
           open={!!selectedProfile}
           onClose={() => setSelectedProfile(null)}
+          onDelete={handleDeleteProfile}
           entity={{
             id: selectedProfile.id,
             name: selectedProfile.name,

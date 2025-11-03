@@ -234,6 +234,36 @@ export default function MusicPage() {
     }
   }
 
+  const handleDeleteTrack = async () => {
+    if (!selectedTrack) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${selectedTrack.name}"? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await apiFetch(`/api/music/${selectedTrack.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok || response.status === 204) {
+        // Remove from list
+        setTracks(tracks.filter((track) => track.id !== selectedTrack.id))
+        // Close modal
+        setSelectedTrack(null)
+      } else {
+        const error = await response.text()
+        console.error('Failed to delete music track:', error)
+        alert(`Failed to delete music track: ${error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete music track:', error)
+      alert('Failed to delete music track. Please try again.')
+    }
+  }
+
   const getTrackBadges = (track: MusicTrack) => {
     const badges: Array<'featured' | 'template' | 'published' | 'draft'> = []
     if (track.status === 'draft') badges.push('draft')
@@ -673,6 +703,7 @@ export default function MusicPage() {
         <DetailModal
           open={!!selectedTrack}
           onClose={() => setSelectedTrack(null)}
+          onDelete={handleDeleteTrack}
           entity={{
             id: selectedTrack.id,
             name: selectedTrack.name,

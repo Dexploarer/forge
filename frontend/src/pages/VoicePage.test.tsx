@@ -251,10 +251,15 @@ describe('VoicePage - Integration Tests', () => {
         expect(screen.getByText('Wise Elder')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /create profile/i }))
+      const createButtons = screen.getAllByRole('button', { name: /create profile/i })
+      await user.click(createButtons[0])
 
-      const createButton = screen.getByRole('button', { name: /^create profile$/i })
-      expect(createButton).toBeDisabled()
+      // In the modal, find the submit button (should be disabled)
+      await waitFor(() => {
+        const modalButtons = screen.getAllByRole('button', { name: /^create profile$/i })
+        const submitButton = modalButtons.find(btn => btn.textContent === 'Create Profile')
+        expect(submitButton).toBeDisabled()
+      })
     })
 
     test('successfully creates voice profile', async () => {
@@ -278,7 +283,8 @@ describe('VoicePage - Integration Tests', () => {
         expect(screen.getByText('Wise Elder')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /create profile/i }))
+      const createButtons = screen.getAllByRole('button', { name: /create profile/i })
+      await user.click(createButtons[0])
 
       // Fill out form
       const nameInput = screen.getByPlaceholderText(/e.g., Wise Elder, Cheerful Merchant/i)
@@ -303,8 +309,14 @@ describe('VoicePage - Integration Tests', () => {
       const toneInput = screen.getByPlaceholderText(/e.g., Warm, Mysterious, Authoritative/i)
       await user.type(toneInput, 'Authoritative')
 
-      // Submit
-      const submitButton = screen.getByRole('button', { name: /^create profile$/i })
+      // Submit - get all buttons and find the one in modal footer
+      await waitFor(() => {
+        const modalButtons = screen.getAllByRole('button', { name: /^create profile$/i })
+        const submitButton = modalButtons.find(btn => btn.textContent === 'Create Profile')
+        expect(submitButton).toBeDefined()
+      })
+      const modalButtons = screen.getAllByRole('button', { name: /^create profile$/i })
+      const submitButton = modalButtons.find(btn => btn.textContent === 'Create Profile')!
       await user.click(submitButton)
 
       // Verify API call
@@ -342,10 +354,13 @@ describe('VoicePage - Integration Tests', () => {
         expect(screen.getByText('Wise Elder')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /create profile/i }))
+      const createButtons = screen.getAllByRole('button', { name: /create profile/i })
+      await user.click(createButtons[0])
       await user.type(screen.getByPlaceholderText(/e.g., Wise Elder, Cheerful Merchant/i), 'Test')
 
-      await user.click(screen.getByRole('button', { name: /^create profile$/i }))
+      const modalButtons = screen.getAllByRole('button', { name: /^create profile$/i })
+      const submitButton = modalButtons.find(btn => btn.textContent === 'Create Profile')!
+      await user.click(submitButton)
 
       // Modal should stay open (creation failed)
       await waitFor(() => {
@@ -371,10 +386,12 @@ describe('VoicePage - Integration Tests', () => {
         expect(screen.getByText('Wise Elder')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /create profile/i }))
+      const createButtons = screen.getAllByRole('button', { name: /create profile/i })
+      await user.click(createButtons[0])
       await user.type(screen.getByPlaceholderText(/e.g., Wise Elder, Cheerful Merchant/i), 'Test')
 
-      const submitButton = screen.getByRole('button', { name: /^create profile$/i })
+      const modalButtons = screen.getAllByRole('button', { name: /^create profile$/i })
+      const submitButton = modalButtons.find(btn => btn.textContent === 'Create Profile')!
       await user.click(submitButton)
 
       expect(screen.getByText('Creating...')).toBeInTheDocument()

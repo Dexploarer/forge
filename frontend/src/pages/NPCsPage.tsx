@@ -192,6 +192,37 @@ export default function NPCsPage() {
     // TODO: Implement clone logic
   }
 
+  const handleDeleteNpc = async () => {
+    if (!selectedNpc) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${selectedNpc.name}"? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await apiFetch(`/api/npcs/${selectedNpc.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok || response.status === 204) {
+        // Remove from list
+        setNpcs(npcs.filter((npc) => npc.id !== selectedNpc.id))
+        // Close modal
+        setShowDetailModal(false)
+        setSelectedNpc(null)
+      } else {
+        const error = await response.text()
+        console.error('Failed to delete NPC:', error)
+        alert(`Failed to delete NPC: ${error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete NPC:', error)
+      alert('Failed to delete NPC. Please try again.')
+    }
+  }
+
   const handleGenerateImage = async () => {
     if (!selectedNpc) return
 
@@ -735,10 +766,7 @@ export default function NPCsPage() {
             // TODO: Implement edit functionality
             console.log('Edit NPC:', selectedNpc.name)
           }}
-          onDelete={() => {
-            // TODO: Implement delete functionality
-            console.log('Delete NPC:', selectedNpc.name)
-          }}
+          onDelete={handleDeleteNpc}
           onClone={() => {
             handleCloneNpc(selectedNpc)
           }}

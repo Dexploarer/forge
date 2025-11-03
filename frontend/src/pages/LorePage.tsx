@@ -366,6 +366,37 @@ export default function LorePage() {
     }
   }
 
+  const handleDeleteLore = async () => {
+    if (!selectedLore) return
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete lore entry "${selectedLore.title}"? This action cannot be undone.`
+    )
+
+    if (!confirmed) return
+
+    try {
+      const response = await apiFetch(`/api/lore/${selectedLore.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok || response.status === 204) {
+        // Remove from list
+        setLore(lore.filter((entry) => entry.id !== selectedLore.id))
+        // Close modal
+        setShowDetailModal(false)
+        setSelectedLore(null)
+      } else {
+        const error = await response.text()
+        console.error('Failed to delete lore entry:', error)
+        alert(`Failed to delete lore entry: ${error}`)
+      }
+    } catch (error) {
+      console.error('Failed to delete lore entry:', error)
+      alert('Failed to delete lore entry. Please try again.')
+    }
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -485,6 +516,7 @@ export default function LorePage() {
         <DetailModal
           open={showDetailModal}
           onClose={() => setShowDetailModal(false)}
+          onDelete={handleDeleteLore}
           entity={{
             id: selectedLore.id,
             name: selectedLore.title,
