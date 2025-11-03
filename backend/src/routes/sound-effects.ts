@@ -488,6 +488,11 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
             name: z.string(),
             status: z.string(),
             generationPrompt: z.string().nullable(),
+            audioUrl: z.string(),
+            duration: z.number().nullable(),
+            fileSize: z.number(),
+            format: z.string(),
+            createdAt: z.string().datetime(),
           })
         }),
         500: z.object({
@@ -571,6 +576,11 @@ const soundEffectsRoutes: FastifyPluginAsync = async (fastify) => {
           name: sfx.name,
           status: sfx.status,
           generationPrompt: sfx.generationPrompt,
+          audioUrl: sfx.audioUrl!,
+          duration: sfx.duration,
+          fileSize: sfx.fileSize!,
+          format: sfx.format!,
+          createdAt: sfx.createdAt.toISOString(),
         }
       })
     } catch (error) {
