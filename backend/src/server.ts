@@ -58,6 +58,7 @@ import importAssetsRoutes from './routes/import-assets'
 import { syncMinioRoute } from './routes/sync-minio'
 import { bulkSyncMinioRoute } from './routes/bulk-sync-minio'
 import { cleanupInvalidAssetsRoute } from './routes/cleanup-invalid-assets'
+import { publicAssetManagementRoute } from './routes/public-asset-management'
 
 // Utils
 import { AppError } from './utils/errors'
@@ -167,6 +168,9 @@ export async function buildServer() {
   await server.register(syncMinioRoute, { prefix: '/api' })
   await server.register(bulkSyncMinioRoute, { prefix: '/api' })
   await server.register(cleanupInvalidAssetsRoute, { prefix: '/api' })
+
+  // Public Asset Management (no auth required)
+  await server.register(publicAssetManagementRoute, { prefix: '/api' })
 
   // Global error handler
   server.setErrorHandler(async (error, request, reply) => {

@@ -104,7 +104,7 @@ export default function ThreeDModelsPage() {
     if (!selectedAsset || !editedName.trim()) return
 
     try {
-      const response = await apiFetch(`/api/assets/${selectedAsset.id}`, {
+      const response = await apiFetch(`/api/public-assets/${selectedAsset.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: editedName.trim() }),
@@ -135,7 +135,7 @@ export default function ThreeDModelsPage() {
 
     try {
       setIsDeleting(true)
-      const response = await apiFetch(`/api/assets/${selectedAsset.id}`, {
+      const response = await apiFetch(`/api/public-assets/${selectedAsset.id}`, {
         method: 'DELETE',
       })
 

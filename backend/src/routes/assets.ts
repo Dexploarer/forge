@@ -314,8 +314,8 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       throw new NotFoundError('Asset not found')
     }
 
-    if (asset.ownerId !== request.user!.id) {
-      throw new ForbiddenError('Only the owner can update this asset')
+    if (asset.ownerId !== request.user!.id && request.user!.role !== 'admin') {
+      throw new ForbiddenError('Only the owner or admin can update this asset')
     }
 
     const [updatedAsset] = await fastify.db
