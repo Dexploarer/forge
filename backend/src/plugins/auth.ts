@@ -102,9 +102,27 @@ const authPlugin: FastifyPluginAsync = async (fastify) => {
       // In password-gate mode, treat optional auth the same as required auth
       const dummyPrivyId = 'password-gate-admin'
 
-      const user = await db.query.users.findFirst({
+      let user = await db.query.users.findFirst({
         where: eq(users.privyUserId, dummyPrivyId)
       })
+
+      if (!user) {
+        // Create dummy admin user on first request
+        const [newUser] = await db.insert(users).values({
+          privyUserId: dummyPrivyId,
+          email: 'admin@forge.local',
+          displayName: 'Admin',
+          role: 'admin',
+          lastLoginAt: new Date(),
+        }).returning()
+        user = newUser
+        fastify.log.info('Created password-gate admin user (via optionalAuth)')
+      } else {
+        // Update last login
+        await db.update(users)
+          .set({ lastLoginAt: new Date() })
+          .where(eq(users.id, user.id))
+      }
 
       if (user) {
         request.user = {

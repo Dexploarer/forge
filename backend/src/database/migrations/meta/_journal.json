@@ -57,6 +57,13 @@
       "when": 1762047396210,
       "tag": "0007_lethal_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1762124263518,
+      "tag": "0008_fast_avengers",
+      "breakpoints": true
     }
   ]
 }

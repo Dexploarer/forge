@@ -11,6 +11,7 @@ import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors'
 import { serializeAllTimestamps } from '../helpers/serialization'
 import { openaiService } from '../services/openai.service'
 import { processGeneration3D } from '../services/3d-generation.processor'
+import { minioStorageService } from '../services/minio.service'
 
 const threeDFeaturesRoutes: FastifyPluginAsync = async (fastify) => {
   // =====================================================
@@ -144,6 +145,112 @@ const threeDFeaturesRoutes: FastifyPluginAsync = async (fastify) => {
       error: metadata?.error || undefined,
       createdAt: asset.createdAt.toISOString(),
       updatedAt: asset.updatedAt.toISOString(),
+    }
+  })
+
+  // Save 3D model to MinIO (download from Meshy and upload to your storage)
+  fastify.post('/save-to-minio/:assetId', {
+    preHandler: [fastify.authenticate],
+    schema: {
+      description: 'Download 3D model from external source and save to MinIO storage',
+      tags: ['3d-features'],
+      params: z.object({
+        assetId: z.string().uuid()
+      }),
+      response: {
+        200: z.object({
+          asset: z.object({
+            id: z.string().uuid(),
+            fileUrl: z.string(),
+            fileSize: z.number(),
+            storageMode: z.literal('minio'),
+            updatedAt: z.string().datetime(),
+          })
+        })
+      }
+    }
+  }, async (request) => {
+    const { assetId } = request.params as { assetId: string }
+
+    const asset = await fastify.db.query.assets.findFirst({
+      where: eq(assets.id, assetId),
+    })
+
+    if (!asset) {
+      throw new NotFoundError('Asset not found')
+    }
+
+    if (asset.ownerId !== request.user!.id) {
+      throw new ForbiddenError('Only the asset owner can save this asset')
+    }
+
+    if (asset.type !== 'model') {
+      throw new ValidationError('Only 3D model assets can be saved to MinIO')
+    }
+
+    const metadata = asset.metadata as Record<string, any>
+
+    // Check if already saved to MinIO
+    if (metadata?.storageMode === 'minio') {
+      throw new ValidationError('Asset is already saved to MinIO storage')
+    }
+
+    // Check if external URL exists
+    if (!asset.fileUrl) {
+      throw new ValidationError('Asset has no file URL to download from')
+    }
+
+    fastify.log.info({ assetId, externalUrl: asset.fileUrl }, '[3D-Save] Downloading model from external source')
+
+    // Download the GLB file from Meshy
+    const response = await fetch(asset.fileUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to download model: ${response.statusText}`)
+    }
+
+    const modelBuffer = Buffer.from(await response.arrayBuffer())
+    fastify.log.info({ assetId, size: modelBuffer.length }, '[3D-Save] Model downloaded successfully')
+
+    // Upload to MinIO
+    const minioData = await minioStorageService.uploadFile(
+      modelBuffer,
+      'model/gltf-binary', // GLB MIME type
+      `${asset.name.replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.glb`
+    )
+
+    fastify.log.info({ assetId, minioUrl: minioData.url }, '[3D-Save] Model uploaded to MinIO')
+
+    // Update asset record
+    const [updatedAsset] = await fastify.db
+      .update(assets)
+      .set({
+        fileUrl: minioData.url,
+        fileSize: modelBuffer.length,
+        metadata: {
+          ...metadata,
+          storageMode: 'minio',
+          minioBucket: minioData.bucket,
+          minioPath: minioData.path,
+          externalUrl: asset.fileUrl, // Keep original URL for reference
+          savedToMinioAt: new Date().toISOString(),
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(assets.id, assetId))
+      .returning()
+
+    if (!updatedAsset) {
+      throw new Error('Failed to update asset')
+    }
+
+    return {
+      asset: {
+        id: updatedAsset.id,
+        fileUrl: updatedAsset.fileUrl!,
+        fileSize: updatedAsset.fileSize!,
+        storageMode: 'minio',
+        updatedAt: updatedAsset.updatedAt.toISOString(),
+      }
     }
   })
 

@@ -61,7 +61,7 @@ export async function processGeneration3D(
 
     console.log(`[3D-Gen] Generation completed for asset ${assetId}`)
 
-    // Step 3: Update asset with results
+    // Step 3: Update asset with results (using Meshy URL - not saved to MinIO yet)
     await dbInstance.update(assets)
       .set({
         status: 'published',
@@ -72,6 +72,8 @@ export async function processGeneration3D(
           meshyTaskId: meshyTask.id,
           thumbnailUrl: result.result?.thumbnailUrl,
           videoUrl: result.result?.videoUrl,
+          storageMode: 'external', // Using Meshy URL (not saved to MinIO)
+          externalUrl: result.result?.modelUrl,
         },
         updatedAt: new Date(),
         publishedAt: new Date(),

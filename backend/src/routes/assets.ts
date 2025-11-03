@@ -20,7 +20,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       querystring: z.object({
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(100).default(20),
-        type: z.enum(['model', 'texture', 'audio']).optional(),
+        type: z.enum(['model', 'texture', 'audio', 'image']).optional(),
         status: z.enum(['draft', 'processing', 'published', 'failed']).optional(),
         ownerId: z.string().uuid().optional(),
       }),
@@ -30,7 +30,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
             id: z.string().uuid(),
             name: z.string(),
             description: z.string().nullable(),
-            type: z.enum(['model', 'texture', 'audio']),
+            type: z.enum(['model', 'texture', 'audio', 'image']),
             status: z.enum(['draft', 'processing', 'published', 'failed']),
             visibility: z.enum(['private', 'public']),
             fileUrl: z.string().nullable(),
@@ -50,7 +50,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const { page, limit, type, status, ownerId } = request.query as {
       page: number
       limit: number
-      type?: 'model' | 'texture' | 'audio'
+      type?: 'model' | 'texture' | 'audio' | 'image'
       status?: 'draft' | 'processing' | 'published' | 'failed'
       ownerId?: string
     }
@@ -127,7 +127,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
             id: z.string().uuid(),
             name: z.string(),
             description: z.string().nullable(),
-            type: z.enum(['model', 'texture', 'audio']),
+            type: z.enum(['model', 'texture', 'audio', 'image']),
             status: z.enum(['draft', 'processing', 'published', 'failed']),
             visibility: z.enum(['private', 'public']),
             fileUrl: z.string().nullable(),
@@ -205,7 +205,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       body: z.object({
         name: z.string().min(1).max(255),
         description: z.string().optional(),
-        type: z.enum(['model', 'texture', 'audio']),
+        type: z.enum(['model', 'texture', 'audio', 'image']),
         visibility: z.enum(['private', 'public']).default('private'),
         metadata: z.record(z.string(), z.any()).optional(),
         tags: z.array(z.string()).default([]).optional(),
@@ -215,7 +215,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
           asset: z.object({
             id: z.string().uuid(),
             name: z.string(),
-            type: z.enum(['model', 'texture', 'audio']),
+            type: z.enum(['model', 'texture', 'audio', 'image']),
             status: z.enum(['draft', 'processing', 'published', 'failed']),
             createdAt: z.string().datetime(),
           })
@@ -226,7 +226,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const data = request.body as {
       name: string
       description?: string
-      type: 'model' | 'texture' | 'audio'
+      type: 'model' | 'texture' | 'audio' | 'image'
       visibility?: 'private' | 'public'
       metadata?: Record<string, any>
       tags?: string[]
@@ -350,6 +350,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
       model: ['model', 'gltf', 'glb'],
       audio: ['audio', 'mp3', 'wav'],
       texture: ['image', 'png', 'jpg', 'jpeg'],
+      image: ['image', 'png', 'jpg', 'jpeg', 'webp', 'gif'],
     }
 
     const allowedFileTypes = allowedTypes[asset.type] || []
@@ -546,7 +547,7 @@ const assetRoutes: FastifyPluginAsync = async (fastify) => {
     const [asset] = await fastify.db.insert(assets).values({
       name: data.name,
       description: `AI-generated image: ${data.prompt}`,
-      type: 'texture',
+      type: 'image',
       status: 'processing',
       ownerId: request.user!.id,
       visibility: 'private',

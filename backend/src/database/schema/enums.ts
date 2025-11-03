@@ -32,6 +32,7 @@ export const visibilityType = pgEnum('visibility_type', [
  */
 export const assetType = pgEnum('asset_type', [
   'model',    // 3D models (GLB, GLTF)
-  'texture',  // Textures (PNG, JPG)
+  'texture',  // Textures for 3D models (PNG, JPG)
   'audio',    // Audio files (MP3, WAV)
+  'image',    // Images (portraits, icons, UI elements)
 ])
