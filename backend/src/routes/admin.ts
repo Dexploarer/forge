@@ -427,7 +427,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
       tags: ['admin'],
       security: [{ bearerAuth: [] }],
     }
-  }, async (_request, reply) => {
+  }, async (_request) => {
     try {
       const { minioStorageService } = await import('../services/minio.service')
 
@@ -599,8 +599,6 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
           fastify.log.info(`Found ${files.length} files in bucket: ${bucket}`)
 
           for (const filename of files) {
-            const key = `${bucket}/${filename}`
-
             // Check if asset with this MinIO key already exists
             const existing = await fastify.db.query.assets.findFirst({
               where: sql`${assets.metadata}->>'minioKey' = ${filename}`,
@@ -717,7 +715,7 @@ const adminRoutes: FastifyPluginAsync = async (fastify) => {
         })
       }
     }
-  }, async (_request, reply) => {
+  }, async (_request) => {
     try {
       fastify.log.info('🔵 Admin triggered Qdrant setup')
 
